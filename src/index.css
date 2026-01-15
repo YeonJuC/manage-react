@@ -1,10 +1,129 @@
-html, body {
-  margin: 0;
-  padding: 0;
+:root {
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-soft: #eef2ff;
 }
-a {
-  text-decoration: none;
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+.app {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
 }
-a:hover {
-  text-decoration: underline;
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
+
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.nav { display: flex; flex-direction: column; gap: 6px; }
+
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.main { display: flex; flex-direction: column; }
+
+.topbar {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.8);
+  backdrop-filter: blur(6px);
+}
+
+.topbar-title { font-weight: 800; }
+.topbar-actions { display: flex; gap: 10px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  height: 40px;
+  padding: 0 18px;
+
+  border-radius: 999px; /* 통통한 핵심 */
+  border: 1px solid var(--primary);
+
+  background: var(--primary);
+  color: #fff;
+
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  filter: brightness(0.95);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+  filter: brightness(0.9);
+}
+
+.btn--ghost {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: none;
+}
+
+.content {
+  padding: 18px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.card p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: sticky; top: 0; z-index: 5; border-right: none; border-bottom: 1px solid var(--border); }
+  .grid { grid-template-columns: 1fr; }
+}
+
