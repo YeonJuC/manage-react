@@ -1,5 +1,9 @@
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import {
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
 import { auth } from "../firebase";
 
 function LoginModal() {
@@ -56,14 +60,10 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
     return () => unsub();
   }, []);
 
-  if (!ready) return null;
+  if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
 
-  return (
-    <>
-      {!loggedIn && <LoginModal />}
-      {children}
-    </>
-  );
+  // ✅ 로그인 안 됐으면 라우팅으로 튕기지 말고 모달로 로그인 유도
+  if (!loggedIn) return <LoginModal />;
+
+  return <>{children}</>;
 }
-
-
