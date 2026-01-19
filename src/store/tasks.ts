@@ -19,18 +19,20 @@ export type Task = {
 const LS_KEY = "manage-react:tasks";
 const LS_COHORT = "manage-react:cohort";
 
-export function loadCohort(): CohortKey | null {
-  return loadJSON<CohortKey | null>(LS_COHORT, null);
-}
-export function saveCohort(cohort: CohortKey) {
-  saveJSON(LS_COHORT, cohort);
+export async function loadCohort(uid: string): Promise<CohortKey | null> {
+  return loadJSON<CohortKey | null>(uid, LS_COHORT, null);
 }
 
-export function loadTasks(): Task[] {
-  return loadJSON<Task[]>(LS_KEY, []);
+export function saveCohort(uid: string, cohort: CohortKey) {
+  return saveJSON(uid, LS_COHORT, cohort);
 }
-export function saveTasks(tasks: Task[]) {
-  saveJSON(LS_KEY, tasks);
+
+export async function loadTasks(uid: string): Promise<Task[]> {
+  return loadJSON<Task[]>(uid, LS_KEY, []);
+}
+
+export function saveTasks(uid: string, tasks: Task[]) {
+  return saveJSON(uid, LS_KEY, tasks);
 }
 
 function formatYMD(d: Date) {

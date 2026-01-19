@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadCohort, loadTasks, type Task, type Phase } from "../store/tasks";
 import { useNavigate } from "react-router-dom";
+import { auth } from "../firebase"; // ✅ 추가
 
 const phaseLabel: Record<Phase, string> = {
   pre: "사전",
@@ -17,8 +18,8 @@ function ymd(date: Date) {
 
 function startOfWeekMonday(d: Date) {
   const copy = new Date(d);
-  const day = copy.getDay(); // 0=일,1=월...
-  const diff = (day + 6) % 7; // 월 기준: 월(1)->0, 일(0)->6
+  const day = copy.getDay();
+  const diff = (day + 6) % 7;
   copy.setDate(copy.getDate() - diff);
   copy.setHours(0, 0, 0, 0);
   return copy;
@@ -33,19 +34,25 @@ function addDays(d: Date, n: number) {
 export default function Dashboard() {
   const [cohort, setCohort] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
-  
   const navigate = useNavigate();
+
+  const uid = auth.currentUser?.uid; // ✅ 추가
 
   const goCalendar = (ymd: string) => {
     navigate(`/calendar?date=${ymd}`);
   };
 
+  // ✅ Firestore에서 로드 (async)
   useEffect(() => {
-    const c = loadCohort();
-    const t = loadTasks();
-    if (c) setCohort(c);
-    setTasks(t);
-  }, []);
+    if (!uid) return;
+
+    (async () => {
+      const c = await loadCohort(uid);
+      const t = await loadTasks(uid);
+      if (c) setCohort(c);
+      setTasks(t);
+    })();
+  }, [uid]);
 
   const todayYmd = useMemo(() => ymd(new Date()), []);
   const weekStart = useMemo(() => startOfWeekMonday(new Date()), []);
@@ -68,21 +75,18 @@ export default function Dashboard() {
     return Math.round((doneCount / totalCount) * 100);
   }, [doneCount, totalCount]);
 
-  // 오늘 할 일
   const todayTasks = useMemo(() => {
     return cohortTasks
       .filter((t) => t.dueDate === todayYmd)
       .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
   }, [cohortTasks, todayYmd]);
 
-  // 지연(오늘 이전 && 미완료)
   const overdueTasks = useMemo(() => {
     return cohortTasks
       .filter((t) => !t.done && t.dueDate < todayYmd)
       .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
   }, [cohortTasks, todayYmd]);
 
-  // 이번 주(월~일)
   const weekTasks = useMemo(() => {
     return cohortTasks
       .filter((t) => t.dueDate >= weekStartYmd && t.dueDate <= weekEnd)
@@ -94,7 +98,6 @@ export default function Dashboard() {
     [weekTasks]
   );
 
-  // 다가오는 일정(오늘 이후, 미완료, 상위 5개)
   const upcoming = useMemo(() => {
     return cohortTasks
       .filter((t) => !t.done && t.dueDate > todayYmd)
@@ -102,7 +105,6 @@ export default function Dashboard() {
       .slice(0, 5);
   }, [cohortTasks, todayYmd]);
 
-  // Phase 요약
   const phaseSummary = useMemo(() => {
     const by: Record<Phase, { total: number; done: number }> = {
       pre: { total: 0, done: 0 },
@@ -115,6 +117,15 @@ export default function Dashboard() {
     }
     return by;
   }, [cohortTasks]);
+
+  // ✅ 로그인 없으면 안내
+  if (!uid) {
+    return (
+      <div className="card" style={{ padding: 16 }}>
+        로그인이 필요합니다. (구글 로그인 후 데이터가 동기화됩니다)
+      </div>
+    );
+  }
 
   return (
     <div>

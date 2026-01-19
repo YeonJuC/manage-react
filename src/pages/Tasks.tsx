@@ -15,6 +15,7 @@ import {
 } from "../store/tasks";
 import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
+import { auth } from "../firebase"; // ✅ 추가
 
 const phaseLabel: Record<Phase, string> = {
   pre: "사전",
@@ -59,30 +60,41 @@ export default function Tasks() {
   const [cohort, setCohort] = useState<CohortKey | "">("");
   const [tasks, setTasks] = useState<Task[]>([]);
 
+  const uid = auth.currentUser?.uid; // ✅ 추가
+
   // 추가 폼 상태
   const [newPhase, setNewPhase] = useState<Phase>("during");
   const [newTitle, setNewTitle] = useState("");
   const [newDueDate, setNewDueDate] = useState(ymdToday());
   const [newAssignee, setNewAssignee] = useState("");
 
+  // ✅ 로그인 사용자 기준 로드
   useEffect(() => {
-    const savedCohort = loadCohort();
-    const savedTasks = loadTasks();
-    setTasks(savedTasks);
-    if (savedCohort) setCohort(savedCohort);
-  }, []);
+    if (!uid) return;
 
-  // 차수 선택 시 템플릿 자동 생성 + 저장
+    (async () => {
+      const savedCohort = await loadCohort(uid);
+      const savedTasks = await loadTasks(uid);
+      setTasks(savedTasks);
+      if (savedCohort) setCohort(savedCohort);
+    })();
+  }, [uid]);
+
+  // ✅ 차수 선택 시 템플릿 자동 생성 + 저장(서버)
   useEffect(() => {
+    if (!uid) return;
     if (!cohort) return;
-    saveCohort(cohort);
 
-    setTasks((prev) => {
-      const next = ensureTemplatesForCohort(prev, cohort);
-      saveTasks(next);
-      return next;
-    });
-  }, [cohort]);
+    (async () => {
+      await saveCohort(uid, cohort);
+
+      setTasks((prev) => {
+        const next = ensureTemplatesForCohort(prev, cohort);
+        void saveTasks(uid, next);
+        return next;
+      });
+    })();
+  }, [cohort, uid]);
 
   const filtered = useMemo(() => {
     if (!cohort) return [];
@@ -104,11 +116,12 @@ export default function Tasks() {
     const doneCount = filtered.reduce((acc, t) => acc + (t.done ? 1 : 0), 0);
     return { doneCount, totalCount };
   }, [filtered]);
-  
+
   const bulkImport = () => {
+    if (!uid) return;
     if (!cohort) return;
 
-    const baseKey = cohorts.find(c => c.label === "32기(1차)")?.key;
+    const baseKey = cohorts.find((c) => c.label === "32기(1차)")?.key;
     if (!baseKey) {
       alert('cohorts에 "32기(1차)" 라벨이 없어요.');
       return;
@@ -175,13 +188,14 @@ export default function Tasks() {
         added++;
       }
 
-      saveTasks(next);
+      void saveTasks(uid, next);
       alert(`일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`);
       return next;
     });
   };
 
   const onAdd = () => {
+    if (!uid) return;
     if (!cohort) return;
     if (!newTitle.trim()) return;
 
@@ -193,7 +207,7 @@ export default function Tasks() {
         phase: newPhase,
         assignee: newAssignee,
       });
-      saveTasks(next);
+      void saveTasks(uid, next);
       return next;
     });
 
@@ -241,9 +255,10 @@ export default function Tasks() {
                   type="checkbox"
                   checked={t.done}
                   onChange={() => {
+                    if (!uid) return;
                     setTasks((prev) => {
                       const next = toggleTask(prev, t.id);
-                      saveTasks(next);
+                      void saveTasks(uid, next);
                       return next;
                     });
                   }}
@@ -252,9 +267,7 @@ export default function Tasks() {
                   <div style={{ textDecoration: t.done ? "line-through" : "none", fontWeight: 700 }}>
                     {t.title}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                    {t.dueDate}
-                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t.dueDate}</div>
                 </div>
               </label>
 
@@ -262,10 +275,11 @@ export default function Tasks() {
                 <select
                   value={t.assignee}
                   onChange={(e) => {
+                    if (!uid) return;
                     const v = e.target.value;
                     setTasks((prev) => {
                       const next = setAssignee(prev, t.id, v);
-                      saveTasks(next);
+                      void saveTasks(uid, next);
                       return next;
                     });
                   }}
@@ -282,9 +296,10 @@ export default function Tasks() {
                   className="btn"
                   style={{ height: 34, borderRadius: 10 }}
                   onClick={() => {
+                    if (!uid) return;
                     setTasks((prev) => {
                       const next = deleteTask(prev, t.id);
-                      saveTasks(next);
+                      void saveTasks(uid, next);
                       return next;
                     });
                   }}
@@ -298,6 +313,15 @@ export default function Tasks() {
       </section>
     );
   };
+
+  // ✅ 로그인 안내
+  if (!uid) {
+    return (
+      <div className="card" style={{ padding: 16 }}>
+        로그인이 필요합니다. (구글 로그인 후 데이터가 동기화됩니다)
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -329,13 +353,15 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* ✅ 추가 폼 */}
       <div className="card" style={{ marginTop: 12, padding: 14 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <strong>할 일 추가</strong>
 
-          <select value={newPhase} onChange={(e) => setNewPhase(e.target.value as Phase)}
-            style={{ height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}>
+          <select
+            value={newPhase}
+            onChange={(e) => setNewPhase(e.target.value as Phase)}
+            style={{ height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
+          >
             <option value="pre">사전</option>
             <option value="during">교육 중</option>
             <option value="post">사후</option>
@@ -372,11 +398,7 @@ export default function Tasks() {
           </button>
 
           {cohort && (
-            <button
-              className="btn btn--ghost"
-              onClick={bulkImport}
-              style={{ marginLeft: "auto", fontWeight: 800 }}
-            >
+            <button className="btn btn--ghost" onClick={bulkImport} style={{ marginLeft: "auto", fontWeight: 800 }}>
               일괄 등록(업무일지)
             </button>
           )}
@@ -385,7 +407,6 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* ✅ 3구역 */}
       <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
         <Section phase="pre" />
         <Section phase="during" />
@@ -394,4 +415,3 @@ export default function Tasks() {
     </div>
   );
 }
-
