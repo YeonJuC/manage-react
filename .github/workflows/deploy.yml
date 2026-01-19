@@ -29,6 +29,21 @@ jobs:
 
       - name: Install
         run: npm ci
+      
+      - name: Check Firebase env (safe)
+        run: |
+          node -e "const v=process.env.VITE_FIREBASE_API_KEY||''; console.log('API_KEY length:', v.length)"
+          node -e "console.log('AUTH_DOMAIN set:', !!process.env.VITE_FIREBASE_AUTH_DOMAIN)"
+          node -e "console.log('PROJECT_ID set:', !!process.env.VITE_FIREBASE_PROJECT_ID)"
+          node -e "console.log('APP_ID set:', !!process.env.VITE_FIREBASE_APP_ID)"
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
 
       - name: Build
         run: npm run build
