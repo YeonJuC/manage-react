@@ -12,13 +12,18 @@
 html, body { margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
 
-.app {
+.app{
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
 }
 
-.sidebar {
+/* ✅ 좌측 사이드바 고정 */
+.sidebar{
+  position: sticky;
+  top: 0;
+  height: 100vh;          /* 화면 높이만큼 고정 */
+  overflow-y: auto;       /* 메뉴가 길어지면 사이드바만 스크롤 */
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px;
@@ -27,10 +32,29 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   gap: 16px;
 }
 
+/* ✅ 오른쪽 본문은 스크롤 되게 */
+.main{
+  min-width: 0;
+}
+
+/* ✅ 사이드바 하단 카드(로그인 영역) 고정 */
+.sidebar-footer{
+  margin-top: auto;         /* 기본적으로 맨 아래로 밀기 */
+  position: sticky;
+  bottom: 12px;
+  background: var(--panel);
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .brand {
   font-weight: 800;
   font-size: 18px;
   letter-spacing: -0.3px;
+}
+
+.dash-item:hover {
+  background: rgba(59,130,246,0.06);
 }
 
 .nav { display: flex; flex-direction: column; gap: 6px; }
@@ -79,6 +103,9 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 
   cursor: pointer;
   transition: all 0.15s ease;
+
+  padding: 0 14px; /* 좌우 여백 */
+  font-weight: 700;
 }
 
 .btn:hover {
@@ -121,9 +148,375 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   gap: 12px;
 }
 
+/* ===== Calendar polish ===== */
+.react-calendar {
+  width: 100%;
+  border: none !important;
+  background: var(--panel) !important;
+  font-family: inherit !important;            
+  border-radius: 16px;
+  padding: 16px 18px; 
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04); /* 선택: 카드 느낌 */
+  width: 100% !important;
+  height: 480px !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.react-calendar__navigation {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.react-calendar__navigation button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.react-calendar__navigation button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.react-calendar__month-view__weekdays {
+  text-transform: none;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+.react-calendar__tile {
+  border-radius: 14px;
+  padding: 14px 6px;   /* 기존 10px → 14px */
+  font-size: 14px;     /* 글자도 살짝 키움 */
+  position: relative;
+  background: transparent;
+}
+
+/* hover */
+.react-calendar__tile:enabled:hover {
+  background: var(--primary-soft);
+}
+
+/* 오늘 */
+.react-calendar__tile--now {
+  background: #f1f5ff;
+}
+
+/* 선택한 날짜 */
+.react-calendar__tile--active {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+
+/* 달력 내부(월 뷰)가 남은 높이를 채우게 */
+.react-calendar__viewContainer {
+  flex: 1;
+  display: flex;
+}
+
+/* 월 뷰 전체를 세로로 꽉 채움 */
+.react-calendar__month-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 주(week) 줄 수를 무조건 6줄 공간으로 맞추기 */
+.react-calendar__month-view__weeks {
+  flex: 1;
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+}
+
+/* 각 주 줄(week)도 grid 아이템처럼 늘어나게 */
+.react-calendar__month-view__weekdays {
+  margin-bottom: 6px;
+}
+
+/* ✅ 모든 날짜에 동일한 하단 영역(점 영역) 고정 */
+.cal-marker {
+  height: 12px;           /* 이 높이만큼 항상 공간 확보 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.cal-marker .dot {
+  opacity: 0;             /* 기본은 숨김 */
+  font-size: 16px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.cal-marker .dot.on {
+  opacity: 1;
+  color: var(--primary);
+}
+
+/* 선택된 날짜일 때 점 색 */
+.react-calendar__tile--active .cal-marker .dot.on {
+  color: #fff;
+}
+
+/* 날짜에 할 일이 있는 경우(진행중) */
+.react-calendar__tile.cal-day-todo {
+  outline: 1px solid var(--border);
+  background: #fff;
+}
+
+/* 날짜의 할 일이 모두 완료된 경우(완료) */
+.react-calendar__tile.cal-day-done {
+  background: #ecfdf5;
+  outline: 1px solid #a7f3d0;
+}
+
+/* 선택된 날짜가 완료 날짜여도 선택(active)이 우선 */
+.react-calendar__tile--active.cal-day-done {
+  background: var(--primary) !important;
+  outline: none;
+}
+
+/* dot 기본/상태 */
+.cal-marker {
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.cal-marker .dot {
+  opacity: 0;
+  font-size: 16px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.cal-marker .dot.on {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.cal-marker .dot.done {
+  opacity: 1;
+  color: #10b981;
+}
+
+.react-calendar__tile--active .cal-marker .dot.on,
+.react-calendar__tile--active .cal-marker .dot.done {
+  color: #fff;
+}
+
+.calendar-layout{
+  grid-template-columns: 450px 1fr;
+}
+
+/* ===== Dashboard small components ===== */
+.progress {
+  height: 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.progress__bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.dash-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dash-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dash-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dash-title {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-date {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ====== Tablet (<= 1024) ====== */
+@media (max-width: 1024px) {
+  .app{
+    grid-template-columns: 240px 1fr;
+  }
+
+  .content{
+    padding: 14px;
+  }
+
+  /* 대시보드 상단 4칸 -> 2칸 */
+  .dash-top-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* 대시보드 하단 2열 -> 1열 */
+  .dash-bottom-grid{
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ====== Mobile (<= 900) ====== */
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; }
-  .sidebar { position: sticky; top: 0; z-index: 5; border-right: none; border-bottom: 1px solid var(--border); }
-  .grid { grid-template-columns: 1fr; }
+  /* 레이아웃: 사이드바를 상단 고정바처럼 */
+  .app{
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar{
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(8px);
+  }
+
+  .auth-float {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 9999;
+    width: 180px;
+    padding: 0;
+    margin: 0;
+    border-top: none; /* 기존 border-top 제거 */
+  }
+
+  /* 카드 자체를 작게 */
+  .auth-float > div {
+    padding: 10px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+  }
+
+  /* 상태점 숨김(공간 줄이기) */
+  .auth-float span[style*="background: #22c55e"] {
+    display: none;
+  }
+
+  /* 로그아웃 버튼 작게 */
+  .auth-float .btn {
+    height: 34px !important;
+    border-radius: 10px !important;
+    font-size: 13px;
+  }
+
+  /* 로그인 상태 텍스트 줄 간격 */
+  .auth-float div[style*="로그인됨"] {
+    margin-top: 2px !important;
+  }
+
+  .brand{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* 메뉴를 가로 스크롤 탭처럼 */
+  .nav{
+    flex-direction: row !important;
+    gap: 8px !important;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .nav a{
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  /* 로그인 박스는 모바일에서는 아래 content로 내려도 되는데
+     지금은 사이드바 안에 계속 보이게: 가로로 붙여 표시 */
+  .sidebar .sidebar-auth{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .topbar{
+    position: sticky;
+    top: 0;
+    z-index: 9;
+  }
+
+  .content{
+    padding: 12px;
+  }
+
+  /* 대시보드 상단 4칸 -> 1칸 */
+  .dash-top-grid{
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 대시보드 하단도 1칸 */
+  .dash-bottom-grid{
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 캘린더 페이지: 좌(캘린더)/우(목록) -> 세로로 */
+  .calendar-grid{
+    grid-template-columns: 1fr !important;
+  }
+  .react-calendar{
+    height: 420px !important;
+  }
+}
+
+/* ====== Small Mobile (<= 480) ====== */
+@media (max-width: 480px) {
+  .react-calendar{
+    height: 380px !important;
+    padding: 12px 12px;
+  }
+
+  .react-calendar__tile{
+    padding: 10px 4px;
+    font-size: 13px;
+  }
+
+  .btn{
+    height: 38px;
+    padding: 0 12px;
+  }
 }
 

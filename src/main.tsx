@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
+import "react-calendar/dist/Calendar.css";
 
 /**
  * GitHub Pages 배포 시 repo명이 base 경로가 됨.
