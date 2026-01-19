@@ -28,6 +28,7 @@ export default function CalendarPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [newTitle, setNewTitle] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   const location = useLocation();
 
@@ -42,6 +43,8 @@ export default function CalendarPage() {
       const savedTasks = await loadTasks(uid);
       setTasks(savedTasks);
       if (savedCohort) setCohort(savedCohort);
+
+      setHydrated(true);
     })();
   }, [uid]);
 
@@ -60,7 +63,7 @@ export default function CalendarPage() {
         return next;
       });
     })();
-  }, [cohort, uid]);
+  }, [cohort, uid, hydrated]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

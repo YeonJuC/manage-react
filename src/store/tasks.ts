@@ -19,8 +19,35 @@ export type Task = {
 const LS_KEY = "manage-react:tasks";
 const LS_COHORT = "manage-react:cohort";
 
+function loadLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function clearLocal(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
 export async function loadCohort(uid: string): Promise<CohortKey | null> {
-  return loadJSON<CohortKey | null>(uid, LS_COHORT, null);
+  const remote = await loadJSON<CohortKey | null>(uid, LS_COHORT, null);
+
+  if (!remote) {
+    const local = loadLocal<CohortKey | null>(LS_COHORT, null);
+    if (local) {
+      await saveJSON(uid, LS_COHORT, local);
+      // clearLocal(LS_COHORT);
+      return local;
+    }
+  }
+
+  return remote;
 }
 
 export function saveCohort(uid: string, cohort: CohortKey) {
@@ -28,7 +55,21 @@ export function saveCohort(uid: string, cohort: CohortKey) {
 }
 
 export async function loadTasks(uid: string): Promise<Task[]> {
-  return loadJSON<Task[]>(uid, LS_KEY, []);
+  const remote = await loadJSON<Task[]>(uid, LS_KEY, []);
+
+  // ✅ Firestore에 데이터가 없을 때만
+  if (!remote || remote.length === 0) {
+    const local = loadLocal<Task[]>(LS_KEY, []);
+
+    if (local.length > 0) {
+      // 🔥 여기
+      await saveJSON(uid, LS_KEY, local); // Firestore로 이관
+      clearLocal(LS_KEY);                 // ✅ ← 바로 이 줄
+      return local;
+    }
+  }
+
+  return remote;
 }
 
 export function saveTasks(uid: string, tasks: Task[]) {

@@ -17,6 +17,8 @@ import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
 import { auth } from "../firebase"; // ✅ 추가
 
+const [hydrated, setHydrated] = useState(false);
+
 const phaseLabel: Record<Phase, string> = {
   pre: "사전",
   during: "교육 중",
@@ -77,12 +79,15 @@ export default function Tasks() {
       const savedTasks = await loadTasks(uid);
       setTasks(savedTasks);
       if (savedCohort) setCohort(savedCohort);
+
+      setHydrated(true);
     })();
   }, [uid]);
 
   // ✅ 차수 선택 시 템플릿 자동 생성 + 저장(서버)
   useEffect(() => {
     if (!uid) return;
+    if (!hydrated) return;
     if (!cohort) return;
 
     (async () => {
@@ -94,7 +99,7 @@ export default function Tasks() {
         return next;
       });
     })();
-  }, [cohort, uid]);
+  }, [cohort, uid, hydrated]);
 
   const filtered = useMemo(() => {
     if (!cohort) return [];
