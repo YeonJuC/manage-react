@@ -30,6 +30,7 @@ const TasksCtx = createContext<Ctx | null>(null);
 // ✅ 로컬스토리지 키
 const LS_COHORT = "manage-react:cohort";
 const LS_KEY = "manage-react:tasks";
+const LS_TASKS_AT = "manage-react:tasksUpdatedAt";
 
 export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
@@ -39,18 +40,17 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [cohort, setCohort] = useState<CohortKey | "">("");
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  // TEST
   useEffect(() => {
     console.log("[TasksStore]", { uid, ready, hydrated, cohort, tasksLen: tasks.length });
   }, [uid, ready, hydrated, cohort, tasks]);
 
+  // ✅ 온라인 복귀 시 자동 reload (다른 기기 변경사항 반영)
   useEffect(() => {
-    const onOnline = () => {
-      console.info("[TasksStore] back online -> reload");
-      void reload();
-    };
+    if (!uid) return;
+    const onOnline = () => void reload();
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
   // 1) auth 상태
@@ -67,9 +67,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     console.log("[TasksStore][reload] start", { uid });
 
     if (!uid) {
-      // ✅ 로그아웃이면 로컬에서라도 보여주고 싶으면 아래 두 줄로 바꿔도 됨
-      // setCohort(loadJSON<CohortKey | "">(LS_COHORT, ""));
-      // setTasks(loadJSON<Task[]>(LS_KEY, []));
       setTasks([]);
       setCohort("");
       setHydrated(true);
@@ -79,18 +76,17 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setHydrated(false);
 
     const fallbackToLocal = (reason: unknown) => {
-      if (reason === "timeout") {
-        console.info("[TasksStore][reload] using local cache");
-      } else {
-        console.warn("[TasksStore][reload] fallback local", reason);
-      }
+      if (reason === "timeout") console.info("[TasksStore][reload] using local cache");
+      else console.warn("[TasksStore][reload] fallback local", reason);
 
-      setCohort(loadJSON(LS_COHORT, ""));
-      setTasks(loadJSON(LS_KEY, []));
+      setCohort(loadJSON<CohortKey | "">(LS_COHORT, ""));
+      setTasks(loadJSON<Task[]>(LS_KEY, []));
     };
 
-    // 5초만 기다리고 타임아웃이면 로컬
-    const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8000));
+    // 8초 타임아웃
+    const timeout = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), 8000)
+    );
 
     try {
       const job = Promise.all([loadCohort(uid), loadTasks(uid)]);
@@ -106,9 +102,12 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       setCohort(savedCohort ?? "");
       setTasks(savedTasks ?? []);
 
-      // ✅ Firestore에서 정상 로드했으면 로컬도 갱신(오프라인 대비)
+      // ✅ cohort는 여기서 로컬 갱신 OK
       saveJSON(LS_COHORT, savedCohort ?? "");
-      saveJSON(LS_KEY, savedTasks ?? []);
+
+      // ⚠️ tasks는 loadTasks()가 이미 "서버/로컬 최신판정 + 로컬 저장"까지 할 수 있으니
+      // 여기서 굳이 saveJSON(LS_KEY, ...)로 다시 덮어쓰지 않는 게 안정적
+      // (필요하면 남겨도 되지만 updatedAt을 같이 맞춰야 함)
     } catch (e) {
       console.warn("[TasksStore][reload] failed -> fallback local", e);
       fallbackToLocal(e);
@@ -117,14 +116,12 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // uid 바뀌면 약간 딜레이 후 reload
   useEffect(() => {
     if (!uid) return;
-
-    const id = setTimeout(() => {
-      void reload();
-    }, 300); // 0.3초만 딜레이
-
+    const id = setTimeout(() => void reload(), 300);
     return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
   // 3) cohort 바뀌면 저장 + 템플릿 보장
@@ -135,15 +132,22 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       await saveCohort(uid, cohort);
+
       setTasks((prev) => {
         const next = ensureTemplatesForCohort(prev, cohort);
-        void saveTasks(uid, next);
-        // ✅ 로컬에도 저장
-        saveJSON(LS_KEY, next);
+
+        // ✅ 템플릿 보장으로 tasks가 바뀌었으면 동기화 저장
+        // saveTasks 내부에서 로컬(tasks, tasksUpdatedAt)까지 같이 저장함
+        if (navigator.onLine) void saveTasks(uid, next);
+        else {
+          // 오프라인이면 로컬만 갱신 (updatedAt도 같이)
+          saveJSON(LS_KEY, next);
+          saveJSON(LS_TASKS_AT, Date.now());
+        }
+
         return next;
       });
 
-      // ✅ 로컬에도 저장
       saveJSON(LS_COHORT, cohort);
     })();
   }, [uid, hydrated, cohort]);
@@ -153,11 +157,14 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setTasks((prev) => {
       const next = updater(prev);
 
-      // ✅ 로컬에는 항상 저장
+      // ✅ 오프라인/온라인 모두 로컬 최신화 (updatedAt 포함)
       saveJSON(LS_KEY, next);
+      saveJSON(LS_TASKS_AT, Date.now());
 
-      // ✅ Firestore는 uid+hydrated일 때만
-      if (uid && hydrated) void saveTasks(uid, next);
+      // ✅ 온라인이면 서버에도 저장 (다른 기기 연동 핵심)
+      if (uid && hydrated && navigator.onLine) {
+        void saveTasks(uid, next);
+      }
 
       return next;
     });
@@ -165,14 +172,12 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const setCohortAndSave = (nextCohort: CohortKey | "") => {
     setCohort(nextCohort);
-
-    // ✅ 로컬에는 항상 저장
     saveJSON(LS_COHORT, nextCohort);
 
     if (!uid || !hydrated) return;
     if (!nextCohort) return;
 
-    void saveCohort(uid, nextCohort);
+    if (navigator.onLine) void saveCohort(uid, nextCohort);
   };
 
   const value = useMemo(
@@ -189,7 +194,6 @@ export function useTasksStore() {
   return v;
 }
 
-/** ✅ 로컬스토리지 유틸 (타입 안전) */
 function loadJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {

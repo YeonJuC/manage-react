@@ -4,14 +4,14 @@ import {
   loadJSONRemote,
   saveJSONRemote,
 } from "./storage";
-import type { CohortKey} from "../data/templates";
+import type { CohortKey } from "../data/templates";
 import { taskTemplates } from "../data/templates";
 import { schedules } from "../data/schedule";
 
 export type Phase = "pre" | "during" | "post";
 
 export type Task = {
-  id: string; // `${cohort}:${tplKey}:${dueDate}`
+  id: string; // `${cohort}:${tplKey}:${dueDate}` or `custom:${uuid}`
   cohort: CohortKey;
   title: string;
   dueDate: string; // YYYY-MM-DD
@@ -21,24 +21,14 @@ export type Task = {
   createdAt: number;
 };
 
+type TasksPayload = {
+  tasks: Task[];
+  updatedAt: number; // ms
+};
+
 const LS_KEY = "manage-react:tasks";
 const LS_COHORT = "manage-react:cohort";
-
-function loadLocal<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function clearLocal(key: string) {
-  try {
-    localStorage.removeItem(key);
-  } catch {}
-}
+const LS_TASKS_AT = "manage-react:tasksUpdatedAt";
 
 export async function loadCohort(uid: string): Promise<CohortKey | null> {
   const remote = await loadJSONRemote<CohortKey>(uid, LS_COHORT);
@@ -60,30 +50,70 @@ export async function saveCohort(uid: string, cohort: CohortKey) {
   await saveJSONRemote(uid, LS_COHORT, cohort);
 }
 
+/**
+ * ✅ 동기화 규칙
+ * - Remote를 우선 시도
+ * - Remote가 없으면 Local
+ * - 둘 다 있으면 updatedAt 최신인 쪽 선택
+ * - Local이 더 최신이면 Remote로 업로드(온라인 연동)
+ */
 export async function loadTasks(uid: string): Promise<Task[]> {
-  const remote = await loadJSONRemote<Task[]>(uid, LS_KEY);
+  const localTasks = loadJSONLocal<Task[]>(LS_KEY, []);
+  const localUpdatedAt = loadJSONLocal<number>(LS_TASKS_AT, 0);
 
-  // 🔒 Firestore 못 읽었으면 → 로컬만 사용 (절대 덮어쓰기 X)
-  if (!remote) {
-    return loadJSONLocal<Task[]>(LS_KEY, []);
+  const remoteRaw = await loadJSONRemote<TasksPayload | Task[]>(uid, LS_KEY);
+
+  // 🔒 Firestore 못 읽었으면 → 로컬만 사용
+  if (!remoteRaw) {
+    return localTasks;
   }
 
-  // Firestore는 비어있고, 로컬에만 있을 때만 이관
-  if (remote.length === 0) {
-    const local = loadJSONLocal<Task[]>(LS_KEY, []);
-    if (local.length > 0) {
-      await saveJSONRemote(uid, LS_KEY, local);
-      return local;
-    }
+  // ✅ 과거 호환: remote가 배열(Task[])로 저장돼 있던 경우
+  const remotePayload: TasksPayload = Array.isArray(remoteRaw)
+    ? { tasks: remoteRaw, updatedAt: 0 }
+    : {
+        tasks: Array.isArray(remoteRaw.tasks) ? remoteRaw.tasks : [],
+        updatedAt: typeof remoteRaw.updatedAt === "number" ? remoteRaw.updatedAt : 0,
+      };
+
+  const remoteTasks = remotePayload.tasks ?? [];
+  const remoteUpdatedAt = remotePayload.updatedAt ?? 0;
+
+  // ✅ Firestore가 비어있고, 로컬에만 있을 때만 이관
+  if (remoteTasks.length === 0 && localTasks.length > 0) {
+    const now = Date.now();
+    const migratedAt = localUpdatedAt || now;
+    await saveJSONRemote(uid, LS_KEY, { tasks: localTasks, updatedAt: migratedAt });
+    saveJSONLocal(LS_TASKS_AT, migratedAt);
+    return localTasks;
   }
 
-  return remote;
+  // ✅ Remote가 최신이면 → 로컬을 Remote로 덮어써서 기기 간 동일하게 만들기
+  if (remoteUpdatedAt >= localUpdatedAt) {
+    saveJSONLocal(LS_KEY, remoteTasks);
+    saveJSONLocal(LS_TASKS_AT, remoteUpdatedAt || Date.now());
+    return remoteTasks;
+  }
+
+  // ✅ Local이 더 최신이면 → Remote로 업로드해서 다른 기기랑 맞추기
+  // (remote 읽기는 됐으니, 보통 online 상태. 실패해도 로컬은 반환)
+  try {
+    await saveJSONRemote(uid, LS_KEY, { tasks: localTasks, updatedAt: localUpdatedAt || Date.now() });
+  } catch {
+    // ignore (오프라인/권한 등)
+  }
+  return localTasks;
 }
 
 export async function saveTasks(uid: string, tasks: Task[]) {
-  // 🔒 빈 배열 저장 금지 (새로고침 리셋 방지)
-  if (tasks.length === 0) return;
-  await saveJSONRemote(uid, LS_KEY, tasks);
+  // ✅ 빈 배열도 저장 허용 (삭제 동기화 필요)
+  const updatedAt = Date.now();
+
+  // 로컬도 같이 갱신해서 "최신" 기준이 유지되게
+  saveJSONLocal(LS_KEY, tasks);
+  saveJSONLocal(LS_TASKS_AT, updatedAt);
+
+  await saveJSONRemote(uid, LS_KEY, { tasks, updatedAt } satisfies TasksPayload);
 }
 
 function formatYMD(d: Date) {
@@ -104,7 +134,6 @@ function phaseFromDueDate(cohort: CohortKey, dueDate: string): Phase {
   const sched = schedules[cohort];
   if (!sched) return "during";
 
-  // YYYY-MM-DD 문자열 비교는 날짜 비교로 그대로 써도 OK
   if (dueDate < sched.pythonStart) return "pre";
   if (dueDate > sched.aiEnd) return "post";
   return "during";
@@ -152,11 +181,11 @@ export function addTask(
   input: { cohort: CohortKey; title: string; dueDate: string; phase: Phase; assignee?: string }
 ): Task[] {
   const now = Date.now();
-  const uid =
+  const uuid =
     (globalThis.crypto as any)?.randomUUID?.() ??
     `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  const id = `custom:${uid}`;
+  const id = `custom:${uuid}`;
 
   return [
     ...tasks,
@@ -180,6 +209,3 @@ export function updateTask(prev: Task[], id: string, patch: Partial<Task>) {
 export function deleteTask(tasks: Task[], id: string): Task[] {
   return tasks.filter((t) => t.id !== id);
 }
-
-
-
