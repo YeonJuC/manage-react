@@ -54,6 +54,32 @@ function phaseOf(dueDate: string, start: string, end: string): Phase {
 export default function Tasks() {
   const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
 
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editPhase, setEditPhase] = useState<Task["phase"]>("during");
+
+  const openEdit = (t: Task) => {
+    setEditing(t);
+    setEditTitle(t.title);
+    setEditDate(t.dueDate);
+    setEditPhase(t.phase);
+  };
+
+  const saveEdit = () => {
+    if (!editing) return;
+
+    setTasksAndSave((prev) =>
+      prev.map((t) =>
+        t.id === editing.id
+          ? { ...t, title: editTitle, dueDate: editDate, phase: editPhase }
+          : t
+      )
+    );
+
+    setEditing(null);
+  };
+
   // 추가 폼 상태
   const [newPhase, setNewPhase] = useState<Phase>("during");
   const [newTitle, setNewTitle] = useState("");
@@ -218,16 +244,24 @@ export default function Tasks() {
                   style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
                 >
                   <option value="">담당자</option>
-                  <option value="차연주">차연주</option>
-                  <option value="한원석">한원석</option>
+                  <option value="차연주">차연주사원</option>
+                  <option value="한원석">한원석교수</option>
                   <option value="대한상공회의소">대한상공회의소</option>
                   <option value="포스텍">포스텍</option>
                 </select>
 
                 <button
+                  className="btn btn--ghost"
+                  onClick={() => openEdit(t)}
+                >
+                  수정
+                </button>
+
+                <button
                   className="btn"
-                  style={{ height: 34, borderRadius: 10 }}
-                  onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
+                  onClick={() =>
+                    setTasksAndSave((prev) => deleteTask(prev, t.id))
+                  }
                 >
                   삭제
                 </button>
@@ -307,8 +341,8 @@ export default function Tasks() {
             style={{ height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
           >
             <option value="">담당자</option>
-            <option value="차연주">차연주</option>
-            <option value="한원석">한원석</option>
+            <option value="차연주">차연주사원</option>
+            <option value="한원석">한원석교수</option>
             <option value="대한상공회의소">대한상공회의소</option>
             <option value="포스텍">포스텍</option>
           </select>
@@ -332,6 +366,52 @@ export default function Tasks() {
         <Section phase="during" />
         <Section phase="post" />
       </div>
+
+      {editing && (
+        <div className="modalOverlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>할 일 수정</h3>
+
+            <div className="modalField">
+              <label>제목</label>
+              <input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="modalField">
+              <label>날짜</label>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+              />
+            </div>
+
+            <div className="modalField">
+              <label>단계</label>
+              <select
+                value={editPhase}
+                onChange={(e) => setEditPhase(e.target.value as Task["phase"])}
+              >
+                <option value="pre">사전</option>
+                <option value="during">교육중</option>
+                <option value="post">사후</option>
+              </select>
+            </div>
+
+            <div className="modalActions">
+              <button className="btn btn--ghost" onClick={() => setEditing(null)}>
+                취소
+              </button>
+              <button className="btn" onClick={saveEdit}>
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

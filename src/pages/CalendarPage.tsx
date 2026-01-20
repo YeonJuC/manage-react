@@ -197,8 +197,8 @@ export default function CalendarPage() {
                         style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
                       >
                         <option value="">담당자</option>
-                        <option value="차연주">차연주</option>
-                        <option value="한원석">한원석</option>
+                        <option value="차연주">차연주사원</option>
+                        <option value="한원석">한원석교수</option>
                         <option value="대한상공회의소">대한상공회의소</option>
                         <option value="포스텍">포스텍</option>
                       </select>

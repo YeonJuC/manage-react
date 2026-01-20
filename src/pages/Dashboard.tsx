@@ -4,6 +4,18 @@ import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
 import type { Task } from "../store/tasks";
 
+function labelPhase(p: Task["phase"]) {
+  if (p === "pre") return "사전";
+  if (p === "during") return "교육중";
+  return "사후";
+}
+
+function sortByDate(a: Task, b: Task) {
+  if (a.dueDate < b.dueDate) return -1;
+  if (a.dueDate > b.dueDate) return 1;
+  return a.title.localeCompare(b.title);
+}
+
 export default function Dashboard() {
   const { uid, ready, hydrated, cohort, setCohort, tasks } = useTasksStore();
   const nav = useNavigate();
@@ -17,14 +29,6 @@ export default function Dashboard() {
   const done = cohortTasks.reduce((acc, t) => acc + (t.done ? 1 : 0), 0);
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
 
-  const upcoming = useMemo(() => {
-    // 미완료 우선 + 날짜 오름차순 + 7개
-    return [...cohortTasks]
-      .filter((t) => !t.done)
-      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1))
-      .slice(0, 7);
-  }, [cohortTasks]);
-
   const todayYmd = useMemo(() => {
     const d = new Date();
     const y = d.getFullYear();
@@ -34,14 +38,24 @@ export default function Dashboard() {
   }, []);
 
   const todayTasks = useMemo(() => {
-    return cohortTasks.filter((t) => t.dueDate === todayYmd);
+    return cohortTasks
+      .filter((t) => !t.done && t.dueDate === todayYmd)
+      .sort(sortByDate)
+      .slice(0, 10);
   }, [cohortTasks, todayYmd]);
 
   const overdueTasks = useMemo(() => {
     return cohortTasks
       .filter((t) => !t.done && t.dueDate < todayYmd)
-      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1))
-      .slice(0, 7);
+      .sort(sortByDate)
+      .slice(0, 10);
+  }, [cohortTasks, todayYmd]);
+
+  const upcomingTasks = useMemo(() => {
+    return cohortTasks
+      .filter((t) => !t.done && t.dueDate > todayYmd)
+      .sort(sortByDate)
+      .slice(0, 10);
   }, [cohortTasks, todayYmd]);
 
   const goDate = (t: Task) => nav(`/calendar?date=${t.dueDate}`);
@@ -51,18 +65,33 @@ export default function Dashboard() {
   if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
 
   return (
-    <div>
-      <h1>대시보드</h1>
+    <div className="dashPage">
+      <div className="dashTop">
+        <div>
+          <h1 className="dashH1">대시보드</h1>
+          <div className="dashHint">
+            {cohort ? (
+              <>선택 차수 <b>{cohort}</b> · 완료 <b>{done}</b> / <b>{total}</b> ({pct}%)</>
+            ) : (
+              <>차수를 선택하면 일정 요약이 표시됩니다.</>
+            )}
+          </div>
+        </div>
+
+        <button className="btn btn--ghost dashGoBtn" onClick={() => nav("/tasks")}>
+          할 일
+        </button>
+      </div>
 
       {/* 차수 선택 */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="dashRow">
           <strong>차수 선택</strong>
 
           <select
             value={cohort}
             onChange={(e) => setCohort(e.target.value as CohortKey)}
-            style={{ height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
+            className="dashSelect"
           >
             <option value="">선택하세요</option>
             {cohorts.map((c) => (
@@ -73,20 +102,12 @@ export default function Dashboard() {
           </select>
 
           {cohort ? (
-            <span style={{ color: "var(--muted)" }}>
+            <span className="dashMuted">
               완료 {done} / {total} ({pct}%)
             </span>
           ) : (
-            <span style={{ color: "var(--muted)" }}>차수를 선택하면 요약이 표시됩니다.</span>
+            <span className="dashMuted">차수를 선택해주세요.</span>
           )}
-
-          <button
-            className="btn btn--ghost"
-            onClick={() => nav("/tasks")}
-            style={{ marginLeft: "auto", height: 34, borderRadius: 12 }}
-          >
-            할 일로 가기
-          </button>
         </div>
 
         {cohort && (
@@ -98,104 +119,101 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* 요약 카드 3개 */}
-      <div className="grid" style={{ marginTop: 12 }}>
+      {/* 숫자 요약 */}
+      <div className="dashStats">
         <div className="card">
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>전체 할 일</div>
-          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{total}</div>
+          <div className="dashStatLabel">전체 할 일</div>
+          <div className="dashStatValue">{total}</div>
         </div>
         <div className="card">
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>완료</div>
-          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{done}</div>
+          <div className="dashStatLabel">완료</div>
+          <div className="dashStatValue">{done}</div>
         </div>
         <div className="card">
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>잔여</div>
-          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{Math.max(0, total - done)}</div>
+          <div className="dashStatLabel">잔여</div>
+          <div className="dashStatValue">{Math.max(0, total - done)}</div>
         </div>
       </div>
 
-      {/* 오늘 할 일 */}
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>오늘 할 일 ({todayYmd})</h3>
-          <button className="btn btn--ghost" onClick={() => nav(`/calendar?date=${todayYmd}`)} style={{ height: 34, borderRadius: 12 }}>
-            오늘 보기
-          </button>
-        </div>
-
-        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
-
-        {cohort && todayTasks.length === 0 && (
-          <div style={{ marginTop: 10, color: "var(--muted)" }}>오늘 등록된 할 일이 없습니다.</div>
-        )}
-
-        {cohort && todayTasks.length > 0 && (
-          <div className="dash-list" style={{ marginTop: 10 }}>
-            {todayTasks.map((t) => (
-              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
-                <span className="dash-badge">{t.phase}</span>
-                <span className="dash-title">{t.title}</span>
-                <span className="dash-date">{t.dueDate}</span>
-              </button>
-            ))}
+      {/* ✅ 3개 섹션을 한꺼번에(그리드) */}
+      <div className="dashTri">
+        <section className="card dashBox">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">오늘 할 일</h3>
+              <div className="dashBoxSub">{todayYmd}</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav(`/calendar?date=${todayYmd}`)}>
+              오늘 보기
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* 다가오는 할 일 */}
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>다가오는 할 일</h3>
-          <button className="btn btn--ghost" onClick={() => nav("/calendar")} style={{ height: 34, borderRadius: 12 }}>
-            캘린더로 가기
-          </button>
-        </div>
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && todayTasks.length === 0 && <div className="dashEmpty">오늘 할 일이 없습니다.</div>}
+          {cohort && todayTasks.length > 0 && (
+            <div className="dashList">
+              {todayTasks.map((t) => (
+                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
+                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="dashItemTitle">{t.title}</span>
+                  <span className="dashItemDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
-        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
-
-        {cohort && upcoming.length === 0 && (
-          <div style={{ marginTop: 10, color: "var(--muted)" }}>미완료 할 일이 없습니다.</div>
-        )}
-
-        {cohort && upcoming.length > 0 && (
-          <div className="dash-list" style={{ marginTop: 10 }}>
-            {upcoming.map((t) => (
-              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
-                <span className="dash-badge">{t.phase}</span>
-                <span className="dash-title">{t.title}</span>
-                <span className="dash-date">{t.dueDate}</span>
-              </button>
-            ))}
+        <section className="card dashBox">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">다가오는 할 일</h3>
+              <div className="dashBoxSub">미완료 기준</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav("/calendar")}>
+              캘린더
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* 밀린 할 일 */}
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>밀린 할 일</h3>
-          <button className="btn btn--ghost" onClick={() => nav("/tasks")} style={{ height: 34, borderRadius: 12 }}>
-            정리하러 가기
-          </button>
-        </div>
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && upcomingTasks.length === 0 && <div className="dashEmpty">다가오는 할 일이 없습니다.</div>}
+          {cohort && upcomingTasks.length > 0 && (
+            <div className="dashList">
+              {upcomingTasks.map((t) => (
+                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
+                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="dashItemTitle">{t.title}</span>
+                  <span className="dashItemDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
-        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
-
-        {cohort && overdueTasks.length === 0 && (
-          <div style={{ marginTop: 10, color: "var(--muted)" }}>밀린 할 일이 없습니다. 굿.</div>
-        )}
-
-        {cohort && overdueTasks.length > 0 && (
-          <div className="dash-list" style={{ marginTop: 10 }}>
-            {overdueTasks.map((t) => (
-              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
-                <span className="dash-badge">{t.phase}</span>
-                <span className="dash-title">{t.title}</span>
-                <span className="dash-date">{t.dueDate}</span>
-              </button>
-            ))}
+        <section className="card dashBox dashBox--danger">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">밀린 할 일</h3>
+              <div className="dashBoxSub">오늘 이전 · 미완료</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav("/tasks")}>
+              정리
+            </button>
           </div>
-        )}
+
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && overdueTasks.length === 0 && <div className="dashEmpty">밀린 할 일이 없습니다! GOOD!</div>}
+          {cohort && overdueTasks.length > 0 && (
+            <div className="dashList">
+              {overdueTasks.map((t) => (
+                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
+                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="dashItemTitle">{t.title}</span>
+                  <span className="dashItemDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

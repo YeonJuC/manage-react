@@ -8,9 +8,10 @@
   --primary-soft: #eef2ff;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; overflow-x: hidden;}
 html, body { margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.main, .content, .card { min-width: 0; }
 
 .app{
   display: grid;
@@ -247,23 +248,27 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   justify-content: center;
 }
 
+/* ✅ 마커 문자를 아예 숨기고, pseudo-element로 동그라미를 그림 */
 .cal-marker .dot{
-  opacity: 0;
-  font-size: 16px;
-  line-height: 1;
+  font-size: 0 !important;     /* 문자(•) 렌더링 제거 */
+  line-height: 0 !important;
 }
 
-.cal-marker .dot.on{
-  opacity: 1;
-  color: var(--primary);
+/* 실제 점 */
+.cal-marker .dot::before{
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
-.cal-marker .dot.done{
-  opacity: 1;
-  color: #10b981;
-}
+/* 상태별 색 유지 */
+.cal-marker .dot.on{ color: var(--primary); }
+.cal-marker .dot.done{ color: #10b981; }
 
-/* 선택된 날짜일 때 점 색 */
+/* 선택된 날짜는 흰색 */
 .react-calendar__tile--active .cal-marker .dot.on,
 .react-calendar__tile--active .cal-marker .dot.done{
   color: #fff;
@@ -321,61 +326,205 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   grid-template-columns: 520px 1fr; /* 왼쪽 넓혀서 달력 여유 */
   gap: 14px;
   align-items: start;
+  padding-top: 14px;
 }
 
 /* ===== Dashboard small components ===== */
-.progress {
-  height: 10px;
-  border-radius: 999px;
-  background: #eef2ff;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
+/* ===== Dashboard Layout ===== */
+.dashPage { display: grid; gap: 12px; }
 
-.progress__bar {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 999px;
+.dashTop{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
 }
+.dashH1{ margin:0; font-size:20px; font-weight:900; letter-spacing:-0.2px; }
+.dashHint{ margin-top:6px; font-size:13px; color:var(--muted); }
+.dashGoBtn{ height:34px; border-radius:12px; }
 
-.dash-list {
-  display: grid;
-  gap: 8px;
+.dashRow{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
 }
+.dashSelect{
+  height:36px;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid var(--border);
+}
+.dashMuted{ color:var(--muted); }
 
-.dash-item {
-  display: grid;
+.dashStats{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.dashStatLabel{ font-size:12px; color:var(--muted); }
+.dashStatValue{ font-size:28px; font-weight:900; margin-top:6px; }
+
+/* ✅ 3박스 한 화면 */
+.dashTri{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.dashBox{ padding:12px; }
+.dashBox--danger{ border-color: rgba(239,68,68,0.35); }
+
+.dashBoxHead{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:10px;
+}
+.dashBoxTitle{ margin:0; font-size:14px; font-weight:900; }
+.dashBoxSub{ margin-top:4px; font-size:12px; color:var(--muted); }
+.dashMiniBtn{ height:34px; border-radius:12px; }
+
+.dashEmpty{ color:var(--muted); font-size:13px; padding:6px 2px; }
+
+.dashList{ display:grid; gap:8px; }
+
+.dashItem{
+  width:100%;
+  display:grid;
   grid-template-columns: auto 1fr auto;
-  gap: 10px;
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:#fff;
+  cursor:pointer;
+  text-align:left;
+}
+.dashItem:hover{ filter: brightness(0.99); }
+
+.dashPill{
+  display: inline-flex;
   align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
-}
+  gap: 6px;
 
-.dash-badge {
-  font-size: 12px;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 700;
-  white-space: nowrap;
-}
 
-.dash-title {
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dash-date {
-  color: var(--muted);
   font-size: 12px;
-  white-space: nowrap;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+
+  border: 1px solid transparent;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.06),
+    inset 0 0 0 1px rgba(255,255,255,0.6);
+}
+
+/* 사전 */
+.dashPill--pre{
+  color: #4338ca;
+  background: linear-gradient(
+    135deg,
+    rgba(99,102,241,0.18),
+    rgba(99,102,241,0.08)
+  );
+  border-color: rgba(99,102,241,0.35);
+}
+
+/* 교육중 */
+.dashPill--during{
+  color: #15803d;
+  background: linear-gradient(
+    135deg,
+    rgba(34,197,94,0.18),
+    rgba(34,197,94,0.08)
+  );
+  border-color: rgba(34,197,94,0.35);
+}
+
+/* 사후 */
+.dashPill--post{
+  color: #b45309;
+  background: linear-gradient(
+    135deg,
+    rgba(245,158,11,0.18),
+    rgba(245,158,11,0.08)
+  );
+  border-color: rgba(245,158,11,0.35);
+}
+
+.dashPill::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.dashItemTitle{
+  font-weight:800;
+  font-size:13px;
+  line-height:1.2;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.dashItemDate{
+  font-size:12px;
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modal{
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+.modalField{
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.modalField label{
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modalField input,
+.modalField select{
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.modalActions{
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 /* ====== Tablet (<= 1024) ====== */
@@ -397,6 +546,14 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   .dash-bottom-grid{
     grid-template-columns: 1fr !important;
   }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1100px){
+  .dashTri{ grid-template-columns: 1fr; }
+  .dashStats{ grid-template-columns: 1fr; }
+  .dashTop{ align-items:flex-start; }
+  .dashGoBtn{ margin-left:0; }
 }
 
 /* ====== Mobile (<= 900) ====== */
@@ -503,18 +660,96 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
     grid-template-columns: 1fr !important;
   }
   .react-calendar{
-    height: 420px !important;
+    height: auto !important;
+    padding: 12px 12px;
+  }
+  /* 7열 유지 + 간격 줄이기 */
+  .react-calendar__month-view__days{
+    gap: 8px;
+  }
+
+  /* 타일이 너무 커서 높이 폭발하는거 줄임 */
+  .react-calendar__tile{
+    min-height: 56px;     /* 기존 72px -> 축소 */
+    padding: 10px 4px;
+    font-size: 13px;
+  }
+
+  /* 점(마커)도 살짝 위로 */
+  .cal-marker{
+    bottom: 8px;
   }
   .calendar-layout{
     grid-template-columns: 1fr; /* 태블릿/모바일은 세로 */
   }
+  
+  .auth-float{
+    display: none !important;
+  }
+
+  /* 혹시 sidebar-footer(로그인 카드)도 같이 숨기고 싶으면 */
+  .sidebar-footer{
+    display: none !important;
+  }
+
+   /* 타일 기준으로 마커를 "아래 가운데"에 고정 */
+  .react-calendar__tile{
+    position: relative; /* 혹시 빠져있으면 필수 */
+  }
+
+  .cal-marker{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 8px;              /* ✅ 모바일: 조금 위로 */
+    height: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0 !important; /* 기존 margin-top 제거 */
+    pointer-events: none;
+  }
+
+  /* 문자 렌더링 제거 + 점을 pseudo로 */
+  .cal-marker .dot{
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+
+  .cal-marker .dot::before{
+    content: "";
+    display: inline-block;
+    width: 7px;               /* ✅ 점 크기 */
+    height: 7px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0;               /* 기본은 안 보이게 */
+  }
+
+  .cal-marker .dot.on::before,
+  .cal-marker .dot.done::before{
+    opacity: 1;
+  }
+
+  /* 관리시스템 텍스트 안 보이게 */
+  .topbar{
+    display: none;
+  }
+}
+
+@media (max-width: 520px){
+  .dashItem{ grid-template-columns: 1fr; }
+  .dashItemDate{ justify-self:start; }
 }
 
 /* ====== Small Mobile (<= 480) ====== */
 @media (max-width: 480px) {
-  .react-calendar{
-    height: 380px !important;
-    padding: 12px 12px;
+  .react-calendar__month-view__days{ gap: 6px; }
+
+  .react-calendar__tile{
+    min-height: 50px;
+    padding: 8px 3px;
+    font-size: 12px;
   }
 
   .react-calendar__tile{
@@ -525,6 +760,14 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   .btn{
     height: 38px;
     padding: 0 12px;
+  }
+
+  .cal-marker{
+    bottom: 7px;
+  }
+  .cal-marker .dot::before{
+    width: 6px;               /* ✅ 더 작은 모바일 */
+    height: 6px;
   }
 }
 
