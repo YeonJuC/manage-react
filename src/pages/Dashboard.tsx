@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
 import type { Task } from "../store/tasks";
+import { useState } from "react";
 
 function labelPhase(p: Task["phase"]) {
   if (p === "pre") return "사전";
@@ -14,6 +15,31 @@ function sortByDate(a: Task, b: Task) {
   if (a.dueDate < b.dueDate) return -1;
   if (a.dueDate > b.dueDate) return 1;
   return a.title.localeCompare(b.title);
+}
+
+function PdfModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+
+  const pdfSrc = `${import.meta.env.BASE_URL}docs/250115_ops.pdf`;
+
+  return (
+    <div className="pdf-overlay" onClick={onClose}>
+      <div className="pdf-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="pdf-header">
+          <span>과정운영 업무정리 PDF</span>
+          <button className="pdf-close" onClick={onClose}>
+            닫기
+          </button>
+        </div>
+
+        <iframe
+          title="ops-pdf"
+          src={pdfSrc}
+          className="pdf-iframe"
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -60,6 +86,8 @@ export default function Dashboard() {
 
   const goDate = (t: Task) => nav(`/calendar?date=${t.dueDate}`);
 
+  const [open, setOpen] = useState(false);
+
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
   if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
   if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
@@ -78,9 +106,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <button className="btn btn--ghost dashGoBtn" onClick={() => nav("/tasks")}>
-          할 일
+        <button
+          type="button" className="pdf-btn"
+          onClick={() => setOpen(true)}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          과정운영 업무정리 보기
         </button>
+
+        <PdfModal open={open} onClose={() => setOpen(false)} />
       </div>
 
       {/* 차수 선택 */}
