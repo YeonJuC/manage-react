@@ -1,9 +1,7 @@
-import { NavLink } from "react-router-dom";
-import AppRoutes from "./routes";
+import { NavLink, Outlet } from "react-router-dom";
 import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { useEffect, useState } from "react";
-import { auth } from "../firebase"; // 경로가 다르면 AppShell 위치에 맞춰 수정
-
+import { auth } from "../firebase";
 
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   display: "block",
@@ -38,59 +36,23 @@ export default function AppShell() {
           <NavLink to="/calendar" style={linkStyle}>캘린더</NavLink>
         </nav>
 
-        {/* ✅ 로그인 박스: sidebar 안 맨 아래로 */}
         <div className="sidebar-footer auth-float">
           {loggedIn ? (
-            <div
-              style={{
-                border: "1px solid var(--border)",
-                background: "#fff",
-                borderRadius: 14,
-                padding: 12,
-                display: "grid",
-                gap: 10,
-              }}
-            >
+            <div style={{ border: "1px solid var(--border)", background: "#fff", borderRadius: 14, padding: 12, display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.2 }}>
-                    {userName || "사용자"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                    로그인됨
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.2 }}>{userName || "사용자"}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>로그인됨</div>
                 </div>
-
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background: "#22c55e",
-                    flex: "0 0 auto",
-                  }}
-                />
+                <span style={{ width: 10, height: 10, borderRadius: 999, background: "#22c55e", flex: "0 0 auto" }} />
               </div>
 
-              <button
-                className="btn"
-                style={{ width: "100%", height: 40, borderRadius: 12, marginTop: 2 }}
-                onClick={() => signOut(auth)}
-              >
+              <button className="btn" style={{ width: "100%", height: 40, borderRadius: 12, marginTop: 2 }} onClick={() => signOut(auth)}>
                 로그아웃
               </button>
             </div>
           ) : (
-            <div
-              style={{
-                border: "1px solid var(--border)",
-                background: "#fff",
-                borderRadius: 14,
-                padding: 12,
-                display: "grid",
-                gap: 10,
-              }}
-            >
+            <div style={{ border: "1px solid var(--border)", background: "#fff", borderRadius: 14, padding: 12, display: "grid", gap: 10 }}>
               <div style={{ fontSize: 13, color: "var(--muted)" }}>로그인이 필요합니다</div>
               <button
                 className="btn"
@@ -113,9 +75,11 @@ export default function AppShell() {
         </header>
 
         <main className="content">
-          <AppRoutes />
+          <Outlet />
         </main>
       </div>
     </div>
   );
 }
+
+

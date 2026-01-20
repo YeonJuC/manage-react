@@ -1,313 +1,202 @@
-import { useEffect, useMemo, useState } from "react";
-import { loadCohort, loadTasks, type Task, type Phase } from "../store/tasks";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../firebase"; // ✅ 추가
-
-const phaseLabel: Record<Phase, string> = {
-  pre: "사전",
-  during: "교육 중",
-  post: "사후",
-};
-
-function ymd(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function startOfWeekMonday(d: Date) {
-  const copy = new Date(d);
-  const day = copy.getDay();
-  const diff = (day + 6) % 7;
-  copy.setDate(copy.getDate() - diff);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-function addDays(d: Date, n: number) {
-  const copy = new Date(d);
-  copy.setDate(copy.getDate() + n);
-  return copy;
-}
+import { cohorts, type CohortKey } from "../data/templates";
+import { useTasksStore } from "../store/TasksContext";
+import type { Task } from "../store/tasks";
 
 export default function Dashboard() {
-  const [cohort, setCohort] = useState<string>("");
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const navigate = useNavigate();
-
-  const uid = auth.currentUser?.uid; // ✅ 추가
-
-  const goCalendar = (ymd: string) => {
-    navigate(`/calendar?date=${ymd}`);
-  };
-
-  // ✅ Firestore에서 로드 (async)
-  useEffect(() => {
-    if (!uid) return;
-
-    (async () => {
-      const c = await loadCohort(uid);
-      const t = await loadTasks(uid);
-      if (c) setCohort(c);
-      setTasks(t);
-    })();
-  }, [uid]);
-
-  const todayYmd = useMemo(() => ymd(new Date()), []);
-  const weekStart = useMemo(() => startOfWeekMonday(new Date()), []);
-  const weekEnd = useMemo(() => ymd(addDays(weekStart, 6)), [weekStart]);
-  const weekStartYmd = useMemo(() => ymd(weekStart), [weekStart]);
+  const { uid, ready, hydrated, cohort, setCohort, tasks } = useTasksStore();
+  const nav = useNavigate();
 
   const cohortTasks = useMemo(() => {
     if (!cohort) return [];
     return tasks.filter((t) => t.cohort === cohort);
   }, [tasks, cohort]);
 
-  const totalCount = cohortTasks.length;
-  const doneCount = useMemo(
-    () => cohortTasks.reduce((acc, t) => acc + (t.done ? 1 : 0), 0),
-    [cohortTasks]
-  );
+  const total = cohortTasks.length;
+  const done = cohortTasks.reduce((acc, t) => acc + (t.done ? 1 : 0), 0);
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
 
-  const progressPct = useMemo(() => {
-    if (totalCount === 0) return 0;
-    return Math.round((doneCount / totalCount) * 100);
-  }, [doneCount, totalCount]);
+  const upcoming = useMemo(() => {
+    // 미완료 우선 + 날짜 오름차순 + 7개
+    return [...cohortTasks]
+      .filter((t) => !t.done)
+      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1))
+      .slice(0, 7);
+  }, [cohortTasks]);
+
+  const todayYmd = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
 
   const todayTasks = useMemo(() => {
-    return cohortTasks
-      .filter((t) => t.dueDate === todayYmd)
-      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
+    return cohortTasks.filter((t) => t.dueDate === todayYmd);
   }, [cohortTasks, todayYmd]);
 
   const overdueTasks = useMemo(() => {
     return cohortTasks
       .filter((t) => !t.done && t.dueDate < todayYmd)
-      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
-  }, [cohortTasks, todayYmd]);
-
-  const weekTasks = useMemo(() => {
-    return cohortTasks
-      .filter((t) => t.dueDate >= weekStartYmd && t.dueDate <= weekEnd)
-      .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
-  }, [cohortTasks, weekStartYmd, weekEnd]);
-
-  const weekDone = useMemo(
-    () => weekTasks.reduce((acc, t) => acc + (t.done ? 1 : 0), 0),
-    [weekTasks]
-  );
-
-  const upcoming = useMemo(() => {
-    return cohortTasks
-      .filter((t) => !t.done && t.dueDate > todayYmd)
       .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1))
-      .slice(0, 5);
+      .slice(0, 7);
   }, [cohortTasks, todayYmd]);
 
-  const phaseSummary = useMemo(() => {
-    const by: Record<Phase, { total: number; done: number }> = {
-      pre: { total: 0, done: 0 },
-      during: { total: 0, done: 0 },
-      post: { total: 0, done: 0 },
-    };
-    for (const t of cohortTasks) {
-      by[t.phase].total += 1;
-      if (t.done) by[t.phase].done += 1;
-    }
-    return by;
-  }, [cohortTasks]);
+  const goDate = (t: Task) => nav(`/calendar?date=${t.dueDate}`);
 
-  // ✅ 로그인 없으면 안내
-  if (!uid) {
-    return (
-      <div className="card" style={{ padding: 16 }}>
-        로그인이 필요합니다. (구글 로그인 후 데이터가 동기화됩니다)
-      </div>
-    );
-  }
+  if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
+  if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
+  if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
 
   return (
     <div>
       <h1>대시보드</h1>
-      <p style={{ color: "var(--muted)", marginTop: 6 }}>
-        {cohort ? `현재 선택: ${cohort}` : "차수를 선택하면 요약이 표시됩니다."}
-      </p>
 
-      {!cohort && (
-        <div className="card" style={{ marginTop: 12 }}>
-          차수를 먼저 선택해줘. (할 일/캘린더에서 선택하면 여기에도 반영됨)
+      {/* 차수 선택 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <strong>차수 선택</strong>
+
+          <select
+            value={cohort}
+            onChange={(e) => setCohort(e.target.value as CohortKey)}
+            style={{ height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
+          >
+            <option value="">선택하세요</option>
+            {cohorts.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
+          {cohort ? (
+            <span style={{ color: "var(--muted)" }}>
+              완료 {done} / {total} ({pct}%)
+            </span>
+          ) : (
+            <span style={{ color: "var(--muted)" }}>차수를 선택하면 요약이 표시됩니다.</span>
+          )}
+
+          <button
+            className="btn btn--ghost"
+            onClick={() => nav("/tasks")}
+            style={{ marginLeft: "auto", height: 34, borderRadius: 12 }}
+          >
+            할 일로 가기
+          </button>
         </div>
-      )}
 
-      {cohort && (
-        <>
-          {/* 상단 핵심 4개 */}
-          <div
-            style={{
-              marginTop: 12,
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: 12,
-            }}
-          >
-            <div className="card" style={{ cursor: "pointer" }} onClick={() => goCalendar(todayYmd)}>
-              <div style={{ fontWeight: 800 }}>오늘</div>
-              <div style={{ color: "var(--muted)", marginTop: 6 }}>
-                할 일 {todayTasks.filter((t) => !t.done).length}건 / 완료{" "}
-                {todayTasks.filter((t) => t.done).length}건
-              </div>
-            </div>
-
-            <div className="card" style={{ cursor: "pointer" }}
-              onClick={() => {
-                // 지연이 있으면 가장 오래된 지연 날짜로, 없으면 오늘로
-                const target = overdueTasks[0]?.dueDate ?? todayYmd;
-                goCalendar(target);
-              }}>
-              <div style={{ fontWeight: 800 }}>지연 ⚠️</div>
-              <div style={{ color: overdueTasks.length ? "#ef4444" : "var(--muted)", marginTop: 6 }}>
-                {overdueTasks.length}건
-              </div>
-            </div>
-
-            <div className="card" style={{ cursor: "pointer" }}
-              onClick={() => {
-                // 이번주는 주 시작일로 이동 (원하면 가장 가까운 weekTasks[0]?.dueDate로 바꿔도 됨)
-                goCalendar(weekStartYmd);
-              }}>
-              <div style={{ fontWeight: 800 }}>이번 주</div>
-              <div style={{ color: "var(--muted)", marginTop: 6 }}>
-                완료 {weekDone} / {weekTasks.length}
-              </div>
-              <div className="progress" style={{ marginTop: 10 }}>
-                <div
-                  className="progress__bar"
-                  style={{
-                    width: weekTasks.length === 0 ? "0%" : `${Math.round((weekDone / weekTasks.length) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="card">
-              <div style={{ fontWeight: 800 }}>차수 전체 진행률</div>
-              <div style={{ color: "var(--muted)", marginTop: 6 }}>
-                완료 {doneCount} / {totalCount} ({progressPct}%)
-              </div>
-              <div className="progress" style={{ marginTop: 10 }}>
-                <div className="progress__bar" style={{ width: `${progressPct}%` }} />
-              </div>
+        {cohort && (
+          <div style={{ marginTop: 12 }}>
+            <div className="progress">
+              <div className="progress__bar" style={{ width: `${pct}%` }} />
             </div>
           </div>
+        )}
+      </div>
 
-          {/* 하단 2열: 지연/다가오는 일정 + phase */}
-          <div
-            style={{
-              marginTop: 12,
-              display: "grid",
-              gridTemplateColumns: "1.3fr 0.7fr",
-              gap: 12,
-              alignItems: "start",
-            }}
-          >
-            <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontWeight: 800 }}>우선 처리</div>
-                <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                  지연 → 오늘 → 다가오는 일정
-                </div>
-              </div>
+      {/* 요약 카드 3개 */}
+      <div className="grid" style={{ marginTop: 12 }}>
+        <div className="card">
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>전체 할 일</div>
+          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{total}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>완료</div>
+          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{done}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>잔여</div>
+          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{Math.max(0, total - done)}</div>
+        </div>
+      </div>
 
-              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>지연된 할 일</div>
-                  {overdueTasks.length === 0 ? (
-                    <div style={{ color: "var(--muted)" }}>없음</div>
-                  ) : (
-                    <div className="dash-list">
-                      {overdueTasks.slice(0, 5).map((t) => (
-                        <div
-                          key={t.id}
-                          className="dash-item"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => goCalendar(t.dueDate)}
-                        >
-                          <span className="dash-badge">⚠️ {phaseLabel[t.phase]}</span>
-                          <span className="dash-title">{t.title}</span>
-                          <span className="dash-date">{t.dueDate}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+      {/* 오늘 할 일 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>오늘 할 일 ({todayYmd})</h3>
+          <button className="btn btn--ghost" onClick={() => nav(`/calendar?date=${todayYmd}`)} style={{ height: 34, borderRadius: 12 }}>
+            오늘 보기
+          </button>
+        </div>
 
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>다가오는 일정</div>
-                  {upcoming.length === 0 ? (
-                    <div style={{ color: "var(--muted)" }}>없음</div>
-                  ) : (
-                    <div className="dash-list">
-                      {upcoming.map((t) => (
-                        <div
-                          key={t.id}
-                          className="dash-item"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => goCalendar(t.dueDate)}
-                        >
-                          <span className="dash-badge">{phaseLabel[t.phase]}</span>
-                          <span className="dash-title">{t.title}</span>
-                          <span className="dash-date">{t.dueDate}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
 
-            <div className="card">
-              <div style={{ fontWeight: 800 }}>Phase 요약</div>
-              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                {(["pre", "during", "post"] as Phase[]).map((p) => {
-                  const s = phaseSummary[p];
-                  const pct = s.total === 0 ? 0 : Math.round((s.done / s.total) * 100);
-                  const done = s.total > 0 && s.done === s.total;
-                  return (
-                    <div key={p} className="phase-row">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontWeight: 700 }}>
-                          {phaseLabel[p]}{" "}
-                          <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                            {s.done}/{s.total}
-                          </span>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: 12,
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: "1px solid var(--border)",
-                            background: done ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.08)",
-                          }}
-                        >
-                          {s.total === 0 ? "없음" : done ? "완료" : "진행 중"}
-                        </span>
-                      </div>
+        {cohort && todayTasks.length === 0 && (
+          <div style={{ marginTop: 10, color: "var(--muted)" }}>오늘 등록된 할 일이 없습니다.</div>
+        )}
 
-                      <div className="progress" style={{ marginTop: 8 }}>
-                        <div className="progress__bar" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        {cohort && todayTasks.length > 0 && (
+          <div className="dash-list" style={{ marginTop: 10 }}>
+            {todayTasks.map((t) => (
+              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
+                <span className="dash-badge">{t.phase}</span>
+                <span className="dash-title">{t.title}</span>
+                <span className="dash-date">{t.dueDate}</span>
+              </button>
+            ))}
           </div>
-        </>
-      )}
+        )}
+      </div>
+
+      {/* 다가오는 할 일 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>다가오는 할 일</h3>
+          <button className="btn btn--ghost" onClick={() => nav("/calendar")} style={{ height: 34, borderRadius: 12 }}>
+            캘린더로 가기
+          </button>
+        </div>
+
+        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
+
+        {cohort && upcoming.length === 0 && (
+          <div style={{ marginTop: 10, color: "var(--muted)" }}>미완료 할 일이 없습니다.</div>
+        )}
+
+        {cohort && upcoming.length > 0 && (
+          <div className="dash-list" style={{ marginTop: 10 }}>
+            {upcoming.map((t) => (
+              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
+                <span className="dash-badge">{t.phase}</span>
+                <span className="dash-title">{t.title}</span>
+                <span className="dash-date">{t.dueDate}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 밀린 할 일 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>밀린 할 일</h3>
+          <button className="btn btn--ghost" onClick={() => nav("/tasks")} style={{ height: 34, borderRadius: 12 }}>
+            정리하러 가기
+          </button>
+        </div>
+
+        {!cohort && <div style={{ marginTop: 10, color: "var(--muted)" }}>차수를 선택해줘.</div>}
+
+        {cohort && overdueTasks.length === 0 && (
+          <div style={{ marginTop: 10, color: "var(--muted)" }}>밀린 할 일이 없습니다. 굿.</div>
+        )}
+
+        {cohort && overdueTasks.length > 0 && (
+          <div className="dash-list" style={{ marginTop: 10 }}>
+            {overdueTasks.map((t) => (
+              <button key={t.id} className="dash-item" onClick={() => goDate(t)} style={{ cursor: "pointer" }}>
+                <span className="dash-badge">{t.phase}</span>
+                <span className="dash-title">{t.title}</span>
+                <span className="dash-date">{t.dueDate}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-

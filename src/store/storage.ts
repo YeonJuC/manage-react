@@ -1,61 +1,58 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
-// ✅ 1) loadJSON 오버로드
-export function loadJSON<T>(key: string, fallback: T): T;
-export async function loadJSON<T>(uid: string, key: string, fallback: T): Promise<T>;
-export function loadJSON<T>(a: string, b: any, c?: any) {
-  // (key, fallback) => localStorage
-  if (typeof c === "undefined") {
-    const key = a;
-    const fallback = b as T;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return fallback;
-      return JSON.parse(raw) as T;
-    } catch {
-      return fallback;
-    }
+// ===== Local =====
+export function loadJSONLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
   }
-
-  // (uid, key, fallback) => Firestore
-  const uid = a;
-  const key = b as string;
-  const fallback = c as T;
-
-  return (async () => {
-    try {
-      const ref = doc(db, "users", uid, "data", key);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return fallback;
-      return snap.data().value as T;
-    } catch {
-      return fallback;
-    }
-  })();
 }
 
-// ✅ 2) saveJSON 오버로드
-export function saveJSON<T>(key: string, value: T): void;
-export async function saveJSON<T>(uid: string, key: string, value: T): Promise<void>;
-export function saveJSON<T>(a: string, b: any, c?: any) {
-  // (key, value) => localStorage
-  if (typeof c === "undefined") {
-    const key = a;
-    const value = b as T;
-    localStorage.setItem(key, JSON.stringify(value));
-    return;
+export function loadLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
   }
+}
 
-  // (uid, key, value) => Firestore
-  const uid = a;
-  const key = b as string;
-  const value = c as T;
+export function saveLocal<T>(key: string, value: T) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
 
-  return (async () => {
-    const ref = doc(db, "users", uid, "data", key);
-    await setDoc(ref, { value }, { merge: true });
-  })();
+export function clearLocal(key: string) {
+  localStorage.removeItem(key);
+}
+
+export function saveJSONLocal<T>(key: string, value: T): void {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+// ===== Remote (Firestore) =====
+export async function loadJSONRemote<T>(uid: string, key: string): Promise<T | null> {
+  const ref = doc(db, "users", uid, "data", key);
+  console.log("[FS] get start", ref.path);
+
+  try {
+    const snap = await getDoc(ref);
+    console.log("[FS] get done", ref.path, "exists=", snap.exists());
+    if (!snap.exists()) return null;
+    return (snap.data()?.value ?? null) as T | null;
+  } catch (e) {
+    console.error("[FS] get failed", ref.path, e);
+    return null;
+  }
+}
+
+export async function saveJSONRemote<T>(uid: string, key: string, value: T): Promise<void> {
+  const ref = doc(db, "users", uid, "data", key);
+  await setDoc(ref, { value, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 

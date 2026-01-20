@@ -1,4 +1,9 @@
-import { loadJSON, saveJSON } from "./storage";
+import {
+  loadJSONLocal,
+  saveJSONLocal,
+  loadJSONRemote,
+  saveJSONRemote,
+} from "./storage";
 import type { CohortKey} from "../data/templates";
 import { taskTemplates } from "../data/templates";
 import { schedules } from "../data/schedule";
@@ -36,35 +41,38 @@ function clearLocal(key: string) {
 }
 
 export async function loadCohort(uid: string): Promise<CohortKey | null> {
-  const remote = await loadJSON<CohortKey | null>(uid, LS_COHORT, null);
+  const remote = await loadJSONRemote<CohortKey>(uid, LS_COHORT);
 
   if (!remote) {
-    const local = loadLocal<CohortKey | null>(LS_COHORT, null);
+    const local = loadJSONLocal<CohortKey | null>(LS_COHORT, null);
     if (local) {
-      await saveJSON(uid, LS_COHORT, local);
-      // clearLocal(LS_COHORT);
+      await saveJSONRemote(uid, LS_COHORT, local);
       return local;
     }
+    return null;
   }
 
   return remote;
 }
 
-export function saveCohort(uid: string, cohort: CohortKey) {
-  return saveJSON(uid, LS_COHORT, cohort);
+export async function saveCohort(uid: string, cohort: CohortKey) {
+  if (!cohort) return;
+  await saveJSONRemote(uid, LS_COHORT, cohort);
 }
 
 export async function loadTasks(uid: string): Promise<Task[]> {
-  const remote = await loadJSON<Task[]>(uid, LS_KEY, []);
+  const remote = await loadJSONRemote<Task[]>(uid, LS_KEY);
 
-  // ✅ Firestore에 데이터가 없을 때만
-  if (!remote || remote.length === 0) {
-    const local = loadLocal<Task[]>(LS_KEY, []);
+  // 🔒 Firestore 못 읽었으면 → 로컬만 사용 (절대 덮어쓰기 X)
+  if (!remote) {
+    return loadJSONLocal<Task[]>(LS_KEY, []);
+  }
 
+  // Firestore는 비어있고, 로컬에만 있을 때만 이관
+  if (remote.length === 0) {
+    const local = loadJSONLocal<Task[]>(LS_KEY, []);
     if (local.length > 0) {
-      // 🔥 여기
-      await saveJSON(uid, LS_KEY, local); // Firestore로 이관
-      clearLocal(LS_KEY);                 // ✅ ← 바로 이 줄
+      await saveJSONRemote(uid, LS_KEY, local);
       return local;
     }
   }
@@ -72,8 +80,10 @@ export async function loadTasks(uid: string): Promise<Task[]> {
   return remote;
 }
 
-export function saveTasks(uid: string, tasks: Task[]) {
-  return saveJSON(uid, LS_KEY, tasks);
+export async function saveTasks(uid: string, tasks: Task[]) {
+  // 🔒 빈 배열 저장 금지 (새로고침 리셋 방지)
+  if (tasks.length === 0) return;
+  await saveJSONRemote(uid, LS_KEY, tasks);
 }
 
 function formatYMD(d: Date) {
@@ -161,6 +171,10 @@ export function addTask(
       createdAt: now,
     },
   ];
+}
+
+export function updateTask(prev: Task[], id: string, patch: Partial<Task>) {
+  return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
 }
 
 export function deleteTask(tasks: Task[], id: string): Task[] {

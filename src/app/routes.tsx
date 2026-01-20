@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import RequireAuth from "./RequireAuth";
+import AppShell from "./Appshell";
 
 import Dashboard from "../pages/Dashboard";
 import Tasks from "../pages/Tasks";
@@ -10,32 +11,21 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route
-        path="/"
         element={
           <RequireAuth>
-            <Dashboard />
+            <AppShell />
           </RequireAuth>
         }
-      />
-      <Route
-        path="/tasks"
-        element={
-          <RequireAuth>
-            <Tasks />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/calendar"
-        element={
-          <RequireAuth>
-            <CalendarPage />
-          </RequireAuth>
-        }
-      />
-
-      <Route path="*" element={<NotFound />} />
+      >
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
     </Routes>
   );
 }
+
+
+
 

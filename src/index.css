@@ -149,24 +149,21 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 }
 
 /* ===== Calendar polish ===== */
+/* ===== Calendar polish (stable) ===== */
 .react-calendar {
-  width: 100%;
+  width: 100% !important;
   border: none !important;
   background: var(--panel) !important;
-  font-family: inherit !important;            
+  font-family: inherit !important;
   border-radius: 16px;
-  padding: 16px 18px; 
-  box-shadow: 0 8px 24px rgba(0,0,0,0.04); /* 선택: 카드 느낌 */
-  width: 100% !important;
-  height: 480px !important;
-  display: flex;
-  flex-direction: column;
+  padding: 16px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
 }
 
 .react-calendar__navigation {
   display: flex;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .react-calendar__navigation button {
@@ -190,12 +187,30 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   padding-bottom: 6px;
 }
 
+/* ✅ 요게 중요: 요일/주/타일 레이아웃 깨지는 걸 막음 */
+.react-calendar__month-view__weekdays,
+.react-calendar__month-view__weekdays__weekday,
+.react-calendar__month-view__days,
+.react-calendar__month-view__days__day {
+  overflow: visible;
+}
+
+/* ✅ 7열 고정 */
+.react-calendar__month-view__days {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ✅ 날짜 타일 카드처럼 */
 .react-calendar__tile {
   border-radius: 14px;
-  padding: 14px 6px;   /* 기존 10px → 14px */
-  font-size: 14px;     /* 글자도 살짝 키움 */
+  padding: 14px 6px;
+  font-size: 14px;
   position: relative;
-  background: transparent;
+  background: #fff;
+  border: 1px solid var(--border);
+  min-height: 72px; /* 박스 높이 통일 */
 }
 
 /* hover */
@@ -212,73 +227,59 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 .react-calendar__tile--active {
   background: var(--primary) !important;
   color: #fff !important;
+  border-color: transparent !important;
 }
 
-/* 달력 내부(월 뷰)가 남은 높이를 채우게 */
-.react-calendar__viewContainer {
-  flex: 1;
-  display: flex;
+/* 다른 달 날짜 (회색) */
+.react-calendar__month-view__days__day--neighboringMonth {
+  opacity: 0.35;
 }
 
-/* 월 뷰 전체를 세로로 꽉 채움 */
-.react-calendar__month-view {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 주(week) 줄 수를 무조건 6줄 공간으로 맞추기 */
-.react-calendar__month-view__weeks {
-  flex: 1;
-  display: grid;
-  grid-template-rows: repeat(6, 1fr);
-}
-
-/* 각 주 줄(week)도 grid 아이템처럼 늘어나게 */
-.react-calendar__month-view__weekdays {
-  margin-bottom: 6px;
-}
-
-/* ✅ 모든 날짜에 동일한 하단 영역(점 영역) 고정 */
-.cal-marker {
-  height: 12px;           /* 이 높이만큼 항상 공간 확보 */
+/* ✅ 아래 점(마커) 위치 고정 */
+.cal-marker{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  height: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 6px;
 }
 
-.cal-marker .dot {
-  opacity: 0;             /* 기본은 숨김 */
+.cal-marker .dot{
+  opacity: 0;
   font-size: 16px;
   line-height: 1;
-  transform: translateY(-1px);
 }
 
-.cal-marker .dot.on {
+.cal-marker .dot.on{
   opacity: 1;
   color: var(--primary);
 }
 
+.cal-marker .dot.done{
+  opacity: 1;
+  color: #10b981;
+}
+
 /* 선택된 날짜일 때 점 색 */
-.react-calendar__tile--active .cal-marker .dot.on {
+.react-calendar__tile--active .cal-marker .dot.on,
+.react-calendar__tile--active .cal-marker .dot.done{
   color: #fff;
 }
 
-/* 날짜에 할 일이 있는 경우(진행중) */
-.react-calendar__tile.cal-day-todo {
-  outline: 1px solid var(--border);
-  background: #fff;
+/* 진행중/완료 하이라이트 */
+.react-calendar__tile.cal-day-todo{
+  outline: 2px solid rgba(37, 99, 235, 0.18);
 }
 
-/* 날짜의 할 일이 모두 완료된 경우(완료) */
-.react-calendar__tile.cal-day-done {
+.react-calendar__tile.cal-day-done{
   background: #ecfdf5;
-  outline: 1px solid #a7f3d0;
+  outline: 2px solid rgba(16, 185, 129, 0.20);
 }
 
-/* 선택된 날짜가 완료 날짜여도 선택(active)이 우선 */
-.react-calendar__tile--active.cal-day-done {
+.react-calendar__tile--active.cal-day-done{
   background: var(--primary) !important;
   outline: none;
 }
@@ -314,8 +315,12 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   color: #fff;
 }
 
+/* Calendar page layout */
 .calendar-layout{
-  grid-template-columns: 450px 1fr;
+  display: grid;
+  grid-template-columns: 520px 1fr; /* 왼쪽 넓혀서 달력 여유 */
+  gap: 14px;
+  align-items: start;
 }
 
 /* ===== Dashboard small components ===== */
@@ -499,6 +504,9 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   }
   .react-calendar{
     height: 420px !important;
+  }
+  .calendar-layout{
+    grid-template-columns: 1fr; /* 태블릿/모바일은 세로 */
   }
 }
 

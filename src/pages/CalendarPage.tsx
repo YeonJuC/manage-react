@@ -1,20 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Calendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
 import { cohorts, type CohortKey } from "../data/templates";
-import {
-  addTask,
-  deleteTask,
-  ensureTemplatesForCohort,
-  loadCohort,
-  loadTasks,
-  saveCohort,
-  saveTasks,
-  setAssignee,
-  toggleTask,
-  type Task,
-} from "../store/tasks";
+import { addTask, deleteTask, setAssignee, toggleTask, type Task } from "../store/tasks";
 import { useLocation } from "react-router-dom";
-import { auth } from "../firebase";
+import { useTasksStore } from "../store/TasksContext";
 
 function ymd(date: Date) {
   const y = date.getFullYear();
@@ -23,58 +13,46 @@ function ymd(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+
 export default function CalendarPage() {
-  const [cohort, setCohort] = useState<CohortKey | "">("");
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState(""); // YYYY-MM-DD
+
+  const openEdit = (task: Task) => {
+    setEditing(task);
+    setEditTitle(task.title);
+    setEditDate(task.dueDate); // dueDate가 string(YYYY-MM-DD)라 가정
+  };
+
+  const saveEdit = () => {
+    if (!editing) return;
+    const title = editTitle.trim();
+    if (!title) return;
+
+    setTasksAndSave((prev) =>
+      prev.map((x) =>
+        x.id === editing.id ? { ...x, title, dueDate: editDate } : x
+      )
+    );
+    setEditing(null);
+  };
+  
+  const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
+
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [newTitle, setNewTitle] = useState("");
-  const [hydrated, setHydrated] = useState(false);
 
   const location = useLocation();
 
-  const uid = auth.currentUser?.uid; // ✅ 로그인 사용자 uid
-
-  // ✅ 로그인 사용자 기준으로 cohort/tasks 로드
-  useEffect(() => {
-    if (!uid) return;
-
-    (async () => {
-      const savedCohort = await loadCohort(uid);
-      const savedTasks = await loadTasks(uid);
-      setTasks(savedTasks);
-      if (savedCohort) setCohort(savedCohort);
-
-      setHydrated(true);
-    })();
-  }, [uid]);
-
-  // ✅ cohort 바뀌면 템플릿 보장 + 저장(서버)
-  useEffect(() => {
-    if (!uid) return;
-    if (!cohort) return;
-
-    (async () => {
-      await saveCohort(uid, cohort);
-
-      setTasks((prev) => {
-        const next = ensureTemplatesForCohort(prev, cohort);
-        // fire-and-forget(비동기 저장)
-        void saveTasks(uid, next);
-        return next;
-      });
-    })();
-  }, [cohort, uid, hydrated]);
-
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const q = params.get("date"); // YYYY-MM-DD
+    const q = params.get("date");
     if (!q) return;
 
     const [y, m, d] = q.split("-").map(Number);
     if (!y || !m || !d) return;
-
-    const next = new Date(y, m - 1, d);
-    setSelectedDate(next);
+    setSelectedDate(new Date(y, m - 1, d));
   }, [location.search]);
 
   const selectedYmd = useMemo(() => ymd(selectedDate), [selectedDate]);
@@ -94,26 +72,18 @@ export default function CalendarPage() {
     return map;
   }, [cohortTasks]);
 
-  const dayTasks = useMemo(() => {
-    return tasksByDate.get(selectedYmd) ?? [];
-  }, [tasksByDate, selectedYmd]);
+  const dayTasks = useMemo(() => tasksByDate.get(selectedYmd) ?? [], [tasksByDate, selectedYmd]);
 
   const getDayStatus = (date: Date) => {
     const key = ymd(date);
     const list = tasksByDate.get(key) ?? [];
     if (list.length === 0) return "none";
-    const allDone = list.every((t) => t.done);
-    return allDone ? "done" : "todo";
+    return list.every((t) => t.done) ? "done" : "todo";
   };
 
-  // ✅ 로그인 안 됐으면 안내만 보여주기
-  if (!uid) {
-    return (
-      <div className="card" style={{ padding: 16 }}>
-        로그인이 필요합니다. (구글 로그인 후 동기화됩니다)
-      </div>
-    );
-  }
+  if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
+  if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
+  if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
 
   return (
     <div>
@@ -140,10 +110,10 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="calendar-layout" style={{ display: "grid", gap: 14, marginTop: 12, alignItems: "start" }}>
+      <div className="calendar-layout">
         <div className="card">
           {!cohort ? (
-            <div>차수를 먼저 선택해줘.</div>
+            <div style={{ color: "var(--muted)" }}>차수를 먼저 선택해줘.</div>
           ) : (
             <Calendar
               onChange={(v) => {
@@ -180,13 +150,7 @@ export default function CalendarPage() {
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="새 할 일 입력"
-                style={{
-                  flex: 1,
-                  height: 36,
-                  padding: "0 12px",
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                }}
+                style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid var(--border)" }}
               />
 
               <button
@@ -195,17 +159,9 @@ export default function CalendarPage() {
                   const title = newTitle.trim();
                   if (!title) return;
 
-                  setTasks((prev) => {
-                    const next = addTask(prev, {
-                      cohort: cohort as CohortKey,
-                      title,
-                      dueDate: selectedYmd,
-                      phase: "during",
-                    });
-                    void saveTasks(uid, next);
-                    return next;
-                  });
-
+                  setTasksAndSave((prev) =>
+                    addTask(prev, { cohort: cohort as CohortKey, title, dueDate: selectedYmd, phase: "during" })
+                  );
                   setNewTitle("");
                 }}
               >
@@ -217,9 +173,7 @@ export default function CalendarPage() {
           {!cohort && <div style={{ color: "var(--muted)" }}>차수를 선택하면 일정에 표시됩니다.</div>}
 
           {cohort && dayTasks.length === 0 && (
-            <div style={{ color: "var(--muted)", marginLeft: "5px", marginTop: "16px" }}>
-              이 날짜에 등록된 할 일이 없습니다.
-            </div>
+            <div style={{ color: "var(--muted)", marginLeft: 5, marginTop: 16 }}>이 날짜에 등록된 할 일이 없습니다.</div>
           )}
 
           {cohort && dayTasks.length > 0 && (
@@ -231,13 +185,7 @@ export default function CalendarPage() {
                       <input
                         type="checkbox"
                         checked={t.done}
-                        onChange={() => {
-                          setTasks((prev) => {
-                            const next = toggleTask(prev, t.id);
-                            void saveTasks(uid, next);
-                            return next;
-                          });
-                        }}
+                        onChange={() => setTasksAndSave((prev) => toggleTask(prev, t.id))}
                       />
                       <span style={{ textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
                     </label>
@@ -245,14 +193,7 @@ export default function CalendarPage() {
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <select
                         value={t.assignee}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setTasks((prev) => {
-                            const next = setAssignee(prev, t.id, v);
-                            void saveTasks(uid, next);
-                            return next;
-                          });
-                        }}
+                        onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
                         style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
                       >
                         <option value="">담당자</option>
@@ -262,15 +203,24 @@ export default function CalendarPage() {
                         <option value="포스텍">포스텍</option>
                       </select>
 
+                      <button
+                        onClick={() => openEdit(t)}
+                        style={{
+                          height: 34,
+                          padding: "0 10px",
+                          borderRadius: 10,
+                          border: "1px solid var(--border)",
+                          background: "#fff",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                        }}
+                      >
+                        수정
+                      </button>
+
                       {t.id.includes(":custom:") && (
                         <button
-                          onClick={() => {
-                            setTasks((prev) => {
-                              const next = deleteTask(prev, t.id);
-                              void saveTasks(uid, next);
-                              return next;
-                            });
-                          }}
+                          onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
                           style={{
                             height: 34,
                             padding: "0 10px",
@@ -291,6 +241,69 @@ export default function CalendarPage() {
                   <div style={{ marginTop: 6, color: "var(--muted)", fontSize: 12 }}>due: {t.dueDate}</div>
                 </div>
               ))}
+            </div>
+          )}
+          {editing && (
+            <div
+              onClick={() => setEditing(null)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.35)",
+                display: "grid",
+                placeItems: "center",
+                zIndex: 9999,
+                padding: 16,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "min(520px, 100%)",
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: "1px solid var(--border)",
+                  padding: 16,
+                }}
+              >
+                <h3 style={{ margin: 0, marginBottom: 12 }}>할 일 수정</h3>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>내용</div>
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      style={{
+                        height: 38,
+                        padding: "0 12px",
+                        borderRadius: 10,
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>날짜</div>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      style={{
+                        height: 38,
+                        padding: "0 12px",
+                        borderRadius: 10,
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                    <button className="btn" onClick={() => setEditing(null)}>취소</button>
+                    <button className="btn" onClick={saveEdit}>저장</button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -1,23 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { cohorts, type CohortKey } from "../data/templates";
 import {
-  ensureTemplatesForCohort,
-  loadCohort,
-  loadTasks,
-  saveCohort,
-  saveTasks,
-  toggleTask,
-  setAssignee,
   addTask,
   deleteTask,
+  toggleTask,
+  setAssignee,
   type Task,
   type Phase,
 } from "../store/tasks";
 import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
-import { auth } from "../firebase"; // ✅ 추가
-
-const [hydrated, setHydrated] = useState(false);
+import { useTasksStore } from "../store/TasksContext";
 
 const phaseLabel: Record<Phase, string> = {
   pre: "사전",
@@ -52,54 +45,20 @@ function diffDays(a: Date, b: Date) {
   const ms = a.getTime() - b.getTime();
   return Math.round(ms / (1000 * 60 * 60 * 24));
 }
-function phaseOf(dueDate: string, start: string, end: string) {
+function phaseOf(dueDate: string, start: string, end: string): Phase {
   if (dueDate < start) return "pre";
   if (dueDate <= end) return "during";
   return "post";
 }
 
 export default function Tasks() {
-  const [cohort, setCohort] = useState<CohortKey | "">("");
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  const uid = auth.currentUser?.uid; // ✅ 추가
+  const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
 
   // 추가 폼 상태
   const [newPhase, setNewPhase] = useState<Phase>("during");
   const [newTitle, setNewTitle] = useState("");
   const [newDueDate, setNewDueDate] = useState(ymdToday());
   const [newAssignee, setNewAssignee] = useState("");
-
-  // ✅ 로그인 사용자 기준 로드
-  useEffect(() => {
-    if (!uid) return;
-
-    (async () => {
-      const savedCohort = await loadCohort(uid);
-      const savedTasks = await loadTasks(uid);
-      setTasks(savedTasks);
-      if (savedCohort) setCohort(savedCohort);
-
-      setHydrated(true);
-    })();
-  }, [uid]);
-
-  // ✅ 차수 선택 시 템플릿 자동 생성 + 저장(서버)
-  useEffect(() => {
-    if (!uid) return;
-    if (!hydrated) return;
-    if (!cohort) return;
-
-    (async () => {
-      await saveCohort(uid, cohort);
-
-      setTasks((prev) => {
-        const next = ensureTemplatesForCohort(prev, cohort);
-        void saveTasks(uid, next);
-        return next;
-      });
-    })();
-  }, [cohort, uid, hydrated]);
 
   const filtered = useMemo(() => {
     if (!cohort) return [];
@@ -122,42 +81,43 @@ export default function Tasks() {
     return { doneCount, totalCount };
   }, [filtered]);
 
-  const bulkImport = () => {
+  const onAdd = () => {
     if (!uid) return;
     if (!cohort) return;
+    if (!newTitle.trim()) return;
+
+    setTasksAndSave((prev) =>
+      addTask(prev, {
+        cohort,
+        title: newTitle.trim(),
+        dueDate: newDueDate,
+        phase: newPhase,
+        assignee: newAssignee,
+      })
+    );
+
+    setNewTitle("");
+  };
+
+  const bulkImport = () => {
+    if (!uid || !cohort) return;
 
     const baseKey = cohorts.find((c) => c.label === "32기(1차)")?.key;
-    if (!baseKey) {
-      alert('cohorts에 "32기(1차)" 라벨이 없어요.');
-      return;
-    }
+    if (!baseKey) return alert('cohorts에 "32기(1차)" 라벨이 없어요.');
 
     const base = cohortDates[baseKey as CohortKey];
     const target = cohortDates[cohort as CohortKey];
-
-    if (!target) {
-      alert("선택한 차수에 대한 일정 정보가 없습니다.");
-      return;
-    }
+    if (!target) return alert("선택한 차수에 대한 일정 정보가 없습니다.");
 
     const delta = diffDays(parseYmd(target.start), parseYmd(base.start));
 
-    setTasks((prev) => {
+    let added = 0, skipped = 0, updated = 0;
+
+    setTasksAndSave((prev) => {
       let next = prev;
 
       const exists = new Map<string, number>();
-      next.forEach((t, idx) => {
-        exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, idx);
-      });
-
-      let added = 0;
-      let skipped = 0;
-      let updated = 0;
-
-      if (!seedTasks32 || seedTasks32.length === 0) {
-        alert("seedTasks32가 비어있어요. seedTasks32.ts 내용을 확인해줘.");
-        return prev;
-      }
+      next.forEach((t, idx) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, idx));
 
       for (const item of seedTasks32) {
         const title = item.title?.trim();
@@ -188,35 +148,17 @@ export default function Tasks() {
           phase: shiftedPhase,
           assignee: item.assignee ?? "",
         });
-
         exists.set(key, next.length - 1);
         added++;
       }
 
-      void saveTasks(uid, next);
-      alert(`일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`);
-      return next;
-    });
-  };
-
-  const onAdd = () => {
-    if (!uid) return;
-    if (!cohort) return;
-    if (!newTitle.trim()) return;
-
-    setTasks((prev) => {
-      const next = addTask(prev, {
-        cohort,
-        title: newTitle.trim(),
-        dueDate: newDueDate,
-        phase: newPhase,
-        assignee: newAssignee,
+      // alert는 밖에서
+      queueMicrotask(() => {
+        alert(`일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`);
       });
-      void saveTasks(uid, next);
+
       return next;
     });
-
-    setNewTitle("");
   };
 
   const Section = ({ phase }: { phase: Phase }) => {
@@ -259,14 +201,7 @@ export default function Tasks() {
                 <input
                   type="checkbox"
                   checked={t.done}
-                  onChange={() => {
-                    if (!uid) return;
-                    setTasks((prev) => {
-                      const next = toggleTask(prev, t.id);
-                      void saveTasks(uid, next);
-                      return next;
-                    });
-                  }}
+                  onChange={() => setTasksAndSave((prev) => toggleTask(prev, t.id))}
                 />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ textDecoration: t.done ? "line-through" : "none", fontWeight: 700 }}>
@@ -279,15 +214,7 @@ export default function Tasks() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select
                   value={t.assignee}
-                  onChange={(e) => {
-                    if (!uid) return;
-                    const v = e.target.value;
-                    setTasks((prev) => {
-                      const next = setAssignee(prev, t.id, v);
-                      void saveTasks(uid, next);
-                      return next;
-                    });
-                  }}
+                  onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
                   style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
                 >
                   <option value="">담당자</option>
@@ -300,14 +227,7 @@ export default function Tasks() {
                 <button
                   className="btn"
                   style={{ height: 34, borderRadius: 10 }}
-                  onClick={() => {
-                    if (!uid) return;
-                    setTasks((prev) => {
-                      const next = deleteTask(prev, t.id);
-                      void saveTasks(uid, next);
-                      return next;
-                    });
-                  }}
+                  onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
                 >
                   삭제
                 </button>
@@ -319,14 +239,9 @@ export default function Tasks() {
     );
   };
 
-  // ✅ 로그인 안내
-  if (!uid) {
-    return (
-      <div className="card" style={{ padding: 16 }}>
-        로그인이 필요합니다. (구글 로그인 후 데이터가 동기화됩니다)
-      </div>
-    );
-  }
+  if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
+  if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
+  if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
 
   return (
     <div>

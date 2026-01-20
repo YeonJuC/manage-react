@@ -1,7 +1,9 @@
-import Appshell from "./app/Appshell";
-
+import AppRoutes from "./app/routes";
 export default function App() {
-  return <Appshell />;
+  return <AppRoutes />;
 }
+
+
+
 
 
