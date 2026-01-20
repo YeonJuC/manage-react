@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  base: "/manage-react/",   // ✅ GitHub Pages용 (레포 이름)
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
@@ -12,6 +13,7 @@ export default defineConfig({
     },
   },
 });
+
 
 
 
