@@ -6,6 +6,7 @@
   --border: #e2e8f0;
   --primary: #2563eb;
   --primary-soft: #eef2ff;
+  --sidebarW: 260px;
 }
 
 * { box-sizing: border-box;}
@@ -14,28 +15,32 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 .main, .content, .card { min-width: 0; }
 
 .app{
-  display: grid;
-  grid-template-columns: 260px 1fr;
   min-height: 100vh;
 }
 
-/* ✅ 좌측 사이드바 고정 */
+/* sidebar 고정 */
 .sidebar{
-  position: sticky;
+  position: fixed;
   top: 0;
-  height: 100vh;          /* 화면 높이만큼 고정 */
-  overflow-y: auto;       /* 메뉴가 길어지면 사이드바만 스크롤 */
+  left: 0;
+  width: var(--sidebarW);
+  height: 100vh;
+  overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  z-index: 20;
 }
 
-/* ✅ 오른쪽 본문은 스크롤 되게 */
+/* main은 사이드바 만큼 오른쪽으로 */
 .main{
+  margin-left: var(--sidebarW);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ✅ 사이드바 하단 카드(로그인 영역) 고정 */
@@ -703,20 +708,20 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 
 /* ====== Mobile (<= 900) ====== */
 @media (max-width: 900px) {
-  /* 레이아웃: 사이드바를 상단 고정바처럼 */
-  .app{
-    grid-template-columns: 1fr;
-  }
+  :root { --sidebarW: 0px; }
 
   .sidebar{
     position: sticky;
     top: 0;
-    z-index: 10;
+    width: 100%;
     height: auto;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--border);
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(8px);
+  }
+
+  .main{
+    margin-left: 0;
   }
 
   .auth-float {
