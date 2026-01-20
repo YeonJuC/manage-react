@@ -153,10 +153,10 @@ export default function Dashboard() {
           {cohort && todayTasks.length > 0 && (
             <div className="dashList">
               {todayTasks.map((t) => (
-                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
-                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
-                  <span className="dashItemTitle">{t.title}</span>
-                  <span className="dashItemDate">{t.dueDate}</span>
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
                 </button>
               ))}
             </div>
@@ -179,10 +179,10 @@ export default function Dashboard() {
           {cohort && upcomingTasks.length > 0 && (
             <div className="dashList">
               {upcomingTasks.map((t) => (
-                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
-                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
-                  <span className="dashItemTitle">{t.title}</span>
-                  <span className="dashItemDate">{t.dueDate}</span>
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
                 </button>
               ))}
             </div>
@@ -205,10 +205,10 @@ export default function Dashboard() {
           {cohort && overdueTasks.length > 0 && (
             <div className="dashList">
               {overdueTasks.map((t) => (
-                <button key={t.id} className="dashItem" onClick={() => goDate(t)}>
-                  <span className={`dashPill dashPill--${t.phase}`}>{labelPhase(t.phase)}</span>
-                  <span className="dashItemTitle">{t.title}</span>
-                  <span className="dashItemDate">{t.dueDate}</span>
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
                 </button>
               ))}
             </div>

@@ -190,7 +190,7 @@ export default function CalendarPage() {
                       <span style={{ textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
                     </label>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }} className="actions">
                       <select
                         value={t.assignee}
                         onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
@@ -203,7 +203,7 @@ export default function CalendarPage() {
                         <option value="포스텍">포스텍</option>
                       </select>
 
-                      <button
+                      <button className="btn-edit"
                         onClick={() => openEdit(t)}
                         style={{
                           height: 34,
@@ -219,7 +219,7 @@ export default function CalendarPage() {
                       </button>
 
                       {t.id.includes(":custom:") && (
-                        <button
+                        <button className="btn-del"
                           onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
                           style={{
                             height: 34,

@@ -221,50 +221,52 @@ export default function Tasks() {
             <div
               key={t.id}
               className="card"
-              style={{ padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}
+              style={{ padding: 12}}
             >
-              <label style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={t.done}
-                  onChange={() => setTasksAndSave((prev) => toggleTask(prev, t.id))}
-                />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ textDecoration: t.done ? "line-through" : "none", fontWeight: 700 }}>
-                    {t.title}
+              <div className="dashItem">
+                  <label style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={t.done}
+                    onChange={() => setTasksAndSave((prev) => toggleTask(prev, t.id))}
+                  />
+                  <div className="dashItemContent">
+                    <div
+                      className={`dashItemTitle ${t.done ? "is-done" : ""}`}
+                    >
+                      {t.title}
+                    </div>
+                    <div className="dashItemDate">{t.dueDate}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{t.dueDate}</div>
+                </label>
+
+                <div className="actions" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <select
+                    value={t.assignee}
+                    onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
+                    style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
+                  >
+                    <option value="">담당자</option>
+                    <option value="차연주">차연주사원</option>
+                    <option value="한원석">한원석교수</option>
+                    <option value="대한상공회의소">대한상공회의소</option>
+                    <option value="포스텍">포스텍</option>
+                  </select>
+
+                  <button className="btn-edit"
+                    onClick={() => openEdit(t)}
+                  >
+                    수정
+                  </button>
+
+                  <button className="btn-del"
+                    onClick={() =>
+                      setTasksAndSave((prev) => deleteTask(prev, t.id))
+                    }
+                  >
+                    삭제
+                  </button>
                 </div>
-              </label>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <select
-                  value={t.assignee}
-                  onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
-                  style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
-                >
-                  <option value="">담당자</option>
-                  <option value="차연주">차연주사원</option>
-                  <option value="한원석">한원석교수</option>
-                  <option value="대한상공회의소">대한상공회의소</option>
-                  <option value="포스텍">포스텍</option>
-                </select>
-
-                <button
-                  className="btn btn--ghost"
-                  onClick={() => openEdit(t)}
-                >
-                  수정
-                </button>
-
-                <button
-                  className="btn"
-                  onClick={() =>
-                    setTasksAndSave((prev) => deleteTask(prev, t.id))
-                  }
-                >
-                  삭제
-                </button>
               </div>
             </div>
           ))}
