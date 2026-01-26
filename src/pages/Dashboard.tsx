@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
-import type { Task, addTask } from "../store/tasks";
+import type { Task } from "../store/tasks";
 import { useState } from "react";
 
 function labelPhase(p: Task["phase"]) {
