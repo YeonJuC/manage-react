@@ -4,6 +4,7 @@ import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
 import type { Task } from "../store/tasks";
 import { useState } from "react";
+import { addTask } from "../store/tasks";
 
 function labelPhase(p: Task["phase"]) {
   if (p === "pre") return "사전";
