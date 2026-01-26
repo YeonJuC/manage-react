@@ -3,6 +3,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 import type { CohortKey } from "../data/templates";
 import {
+  addTask,
   ensureTemplatesForCohort,
   loadCohort,
   loadTasks,
@@ -10,6 +11,8 @@ import {
   saveTasks,
   type Task,
 } from "./tasks";
+import { materializeTemplatesForCohort, isDismissed, removeCustomTemplate, dismissTemplateForCohort } from "./customTemplates";
+import { cohortDates } from "../data/cohortDates"; 
 
 type Ctx = {
   uid: string | null;
@@ -23,14 +26,59 @@ type Ctx = {
   setTasksAndSave: (updater: (prev: Task[]) => Task[]) => void;
 
   reload: () => Promise<void>;
+
+  applyTemplateToAllCohorts: (tpl: {
+    templateId: string;
+    title: string;
+    assignee?: string;
+    offsetDays: number;
+  }) => void;
+
+  bulkUpdateByTemplateId: (
+    templateId: string,
+    patch: Partial<Pick<Task, "title" | "assignee" | "dueDate" | "phase">>
+  ) => void;
+
+  bulkDeleteByTemplateId: (templateId: string) => void;
+
 };
 
 const TasksCtx = createContext<Ctx | null>(null);
 
 // ✅ 로컬스토리지 키
+const LS_SEEDED = "manage-react:seededCohorts";
+function loadSeeded(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(LS_SEEDED) || "{}"); } catch { return {}; }
+}
+function saveSeeded(m: Record<string, boolean>) {
+  localStorage.setItem(LS_SEEDED, JSON.stringify(m));
+}
+
 const LS_COHORT = "manage-react:cohort";
 const LS_KEY = "manage-react:tasks";
 const LS_TASKS_AT = "manage-react:tasksUpdatedAt";
+
+
+function parseYmd(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function fmtYmd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function addDays(date: Date, n: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + n);
+  return copy;
+}
+function phaseOf(dueDate: string, start: string, end: string) {
+  if (dueDate < start) return "pre";
+  if (dueDate <= end) return "during";
+  return "post";
+}
 
 export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
@@ -99,8 +147,18 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
       const [savedCohort, savedTasks] = res;
 
+      const filteredTasks = (savedTasks ?? []).filter((t) => {
+        // 커스텀 템플릿에서 생성된 task이고
+        if (t.origin === "custom" && t.templateId) {
+          // 이 기수에서 dismiss된 템플릿이면 제외
+          return !isDismissed(String(savedCohort), t.templateId);
+        }
+        return true;
+      });
+
       setCohort(savedCohort ?? "");
-      setTasks(savedTasks ?? []);
+      setTasks(filteredTasks);
+
 
       // ✅ cohort는 여기서 로컬 갱신 OK
       saveJSON(LS_COHORT, savedCohort ?? "");
@@ -134,13 +192,51 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       await saveCohort(uid, cohort);
 
       setTasks((prev) => {
-        const next = ensureTemplatesForCohort(prev, cohort);
+        let next = prev;
 
-        // ✅ 템플릿 보장으로 tasks가 바뀌었으면 동기화 저장
-        // saveTasks 내부에서 로컬(tasks, tasksUpdatedAt)까지 같이 저장함
+        // ✅ 기본 템플릿은 "최초 1회만" 시드
+        const seeded = loadSeeded();
+        const seededKey = String(cohort);
+
+        if (!seeded[seededKey]) {
+          next = ensureTemplatesForCohort(next, cohort);
+
+          seeded[seededKey] = true;
+          saveSeeded(seeded);
+        }
+
+        // ✅ 커스텀 템플릿은 매번 반영(중복은 스킵)
+        const toAdd = materializeTemplatesForCohort(cohort as CohortKey);
+        const existsTemplateIds = new Set(
+          next.filter((t) => t.templateId).map((t) => t.templateId)
+        );
+
+
+        for (const it of toAdd) {
+          if (!it.templateId) continue;
+
+          // ⭐ 이미 있는 템플릿이면 스킵
+          if (existsTemplateIds.has(it.templateId)) continue;
+
+          // ⭐ 이 기수에서 삭제된 템플릿이면 스킵
+          if (isDismissed(String(cohort), it.templateId)) continue;
+
+          next = addTask(next, {
+            cohort: it.cohort,
+            title: it.title,
+            dueDate: it.dueDate,
+            phase: it.phase,
+            assignee: it.assignee ?? "",
+            templateId: it.templateId,
+            origin: "custom",
+          });
+
+          existsTemplateIds.add(it.templateId);
+        }
+
+        // 저장은 기존 로직대로
         if (navigator.onLine) void saveTasks(uid, next);
         else {
-          // 오프라인이면 로컬만 갱신 (updatedAt도 같이)
           saveJSON(LS_KEY, next);
           saveJSON(LS_TASKS_AT, Date.now());
         }
@@ -170,6 +266,76 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const bulkUpdateByTemplateId = (
+    templateId: string,
+    patch: Partial<Pick<Task, "title" | "assignee" | "dueDate" | "phase">>
+  ) => {
+    setTasksAndSave((prev) =>
+      prev.map((t) => (t.templateId === templateId ? { ...t, ...patch } : t))
+    );
+  };
+
+  // ✅ 전 기수 일괄 삭제
+  const bulkDeleteByTemplateId = (templateId: string) => {
+    // ✅ 1) 템플릿 자체 삭제(재생성 원천 차단)
+    removeCustomTemplate(templateId);
+
+    // ✅ 2) 32~35 모두 dismiss 기록(혹시 로컬 꼬임/캐시 남아도 재추가 방지)
+    (Object.keys(cohortDates) as CohortKey[]).forEach((ck) => {
+      dismissTemplateForCohort(String(ck), templateId);
+    });
+
+    // ✅ 3) 현재 tasks에서도 전부 제거
+    setTasksAndSave((prev) => prev.filter((t) => t.templateId !== templateId));
+  };
+
+  // ✅ 전 기수(32~35)에 템플릿 1개를 즉시 생성 반영
+  const applyTemplateToAllCohorts = (tpl: {
+    templateId: string;
+    title: string;
+    assignee?: string;
+    offsetDays: number;
+  }) => {
+    setTasksAndSave((prev) => {
+      let next = prev;
+
+      // 32~35만 대상: cohortDates에 있는 것만
+      const cohortKeys = Object.keys(cohortDates) as CohortKey[];
+
+      // 중복 방지: cohort|templateId
+      const exists = new Set(
+        next
+          .filter((t) => t.templateId)
+          .map((t) => `${t.cohort}|${t.templateId}`)
+      );
+
+      for (const ck of cohortKeys) {
+        const target = cohortDates[ck];
+        if (!target) continue;
+
+        const due = fmtYmd(addDays(parseYmd(target.start), tpl.offsetDays));
+        const phase = phaseOf(due, target.start, target.end);
+
+        const k = `${ck}|${tpl.templateId}`;
+        if (exists.has(k)) continue;
+
+        next = addTask(next, {
+          cohort: ck,
+          title: tpl.title,
+          dueDate: due,
+          phase,
+          assignee: tpl.assignee ?? "",
+          templateId: tpl.templateId,
+          origin: "custom",
+        });
+
+        exists.add(k);
+      }
+
+      return next;
+    });
+  };
+
   const setCohortAndSave = (nextCohort: CohortKey | "") => {
     setCohort(nextCohort);
     saveJSON(LS_COHORT, nextCohort);
@@ -181,7 +347,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ uid, ready, hydrated, cohort, setCohort: setCohortAndSave, tasks, setTasksAndSave, reload }),
+    () => ({ uid, ready, hydrated, cohort, setCohort: setCohortAndSave, 
+      tasks, setTasksAndSave, reload, applyTemplateToAllCohorts, 
+      bulkUpdateByTemplateId, bulkDeleteByTemplateId }),
     [uid, ready, hydrated, cohort, tasks]
   );
 

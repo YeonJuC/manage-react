@@ -5,6 +5,7 @@ import { cohorts, type CohortKey } from "../data/templates";
 import { addTask, deleteTask, setAssignee, toggleTask, type Task } from "../store/tasks";
 import { useLocation } from "react-router-dom";
 import { useTasksStore } from "../store/TasksContext";
+import { cohortDates } from "../data/cohortDates";
 
 function ymd(date: Date) {
   const y = date.getFullYear();
@@ -13,12 +14,17 @@ function ymd(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+function phaseOf(dueDate: string, start: string, end: string) {
+  if (dueDate < start) return "pre";
+  if (dueDate <= end) return "during";
+  return "post";
+}
 
 export default function CalendarPage() {
   const [editing, setEditing] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState(""); // YYYY-MM-DD
-
+  
   const openEdit = (task: Task) => {
     setEditing(task);
     setEditTitle(task.title);
@@ -27,17 +33,27 @@ export default function CalendarPage() {
 
   const saveEdit = () => {
     if (!editing) return;
+
     const title = editTitle.trim();
     if (!title) return;
+    if (!cohort) return;
+
+    const range = cohortDates[cohort as CohortKey];
+    const phase = range
+      ? phaseOf(editDate, range.start, range.end)
+      : editing.phase; // fallback: 기존값 유지
 
     setTasksAndSave((prev) =>
       prev.map((x) =>
-        x.id === editing.id ? { ...x, title, dueDate: editDate } : x
+        x.id === editing.id
+          ? { ...x, title, dueDate: editDate, phase }
+          : x
       )
     );
+
     setEditing(null);
   };
-  
+
   const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -158,10 +174,23 @@ export default function CalendarPage() {
                 onClick={() => {
                   const title = newTitle.trim();
                   if (!title) return;
+                  if (!cohort) return;
+
+                  const range = cohortDates[cohort as CohortKey];
+
+                  const phase = range
+                    ? phaseOf(selectedYmd, range.start, range.end)
+                    : "during";
 
                   setTasksAndSave((prev) =>
-                    addTask(prev, { cohort: cohort as CohortKey, title, dueDate: selectedYmd, phase: "during" })
+                    addTask(prev, {
+                      cohort: cohort as CohortKey,
+                      title,
+                      dueDate: selectedYmd,
+                      phase,
+                    })
                   );
+
                   setNewTitle("");
                 }}
               >

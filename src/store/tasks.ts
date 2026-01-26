@@ -19,6 +19,8 @@ export type Task = {
   assignee: string;
   done: boolean;
   createdAt: number;
+  templateId?: string;
+  origin?: "seed" | "custom";
 };
 
 type TasksPayload = {
@@ -177,30 +179,20 @@ export function setAssignee(tasks: Task[], id: string, assignee: string): Task[]
 }
 
 export function addTask(
-  tasks: Task[],
-  input: { cohort: CohortKey; title: string; dueDate: string; phase: Phase; assignee?: string }
-): Task[] {
-  const now = Date.now();
-  const uuid =
-    (globalThis.crypto as any)?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  const id = `custom:${uuid}`;
-
-  return [
-    ...tasks,
-    {
-      id,
-      cohort: input.cohort,
-      title: input.title,
-      dueDate: input.dueDate,
-      phase: input.phase,
-      assignee: input.assignee ?? "",
-      done: false,
-      createdAt: now,
-    },
-  ];
+  prev: Task[],
+  input: Pick<Task, "cohort" | "title" | "dueDate" | "phase"> &
+    Partial<Pick<Task, "assignee" | "templateId" | "origin">>
+) {
+  const task: Task = {
+    id: "custom:" + crypto.randomUUID(),
+    createdAt: Date.now(),
+    done: false,
+    assignee: "",
+    ...input, // ✅ templateId/origin/assignee 들어오면 유지됨
+  };
+  return [...prev, task];
 }
+
 
 export function updateTask(prev: Task[], id: string, patch: Partial<Task>) {
   return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));

@@ -743,6 +743,202 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   border: none;
 }
 
+/*전 기수 업로드 버튼*/
+/* actions 영역 기본 */
+.actions{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 담당자 셀렉트 */
+.assigneeSelect{
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+/* ⋯ 버튼 & 메뉴 */
+.moreWrap{
+  position: relative;
+}
+
+.btn-more{
+  height: 34px;
+  width: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.btn-more:hover{
+  background: rgba(59,130,246,0.08);
+}
+
+.moreMenu{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.10);
+  z-index: 30;
+}
+
+.moreItem{
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.moreItem:hover{
+  background: rgba(59,130,246,0.08);
+}
+
+.toast{
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  z-index: 100;
+}
+/* ===== ⋯ More menu ===== */
+.moreWrap { position: relative; }
+
+.btn-more{
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.btn-more:active{ transform: translateY(1px); }
+
+.moreMenu{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.10);
+  display: grid;
+  gap: 4px;
+  z-index: 50;
+}
+
+.moreItem{
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 800;
+}
+
+.moreItem:hover{ background: rgba(59,130,246,0.08); }
+.moreItem:active{ transform: translateY(1px); }
+
+.moreIcon{ font-size: 15px; line-height: 1; }
+.moreLabel{ font-size: 14px; }
+
+.moreItem--danger{ color: #dc2626; }
+.moreItem--danger:hover{ background: rgba(220,38,38,0.08); }
+
+/* ===== Modal polish ===== */
+.modal{
+  width: min(560px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+
+.modal--danger .modalTitle{ color: #dc2626; }
+
+.modalHead{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.modalTitle{ margin: 0; font-size: 18px; font-weight: 900; }
+
+.modalX{
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 900;
+}
+.modalX:hover{ background: rgba(0,0,0,0.04); }
+
+.modalBody{ padding: 6px 2px 2px; }
+.modalMain{ margin: 0; line-height: 1.6; }
+
+.modalWarn{
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(220,38,38,0.08);
+  color: #b91c1c;
+  font-weight: 800;
+}
+.modalWarnIcon{ margin-top: 1px; }
+
+.modalActions--right{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* Danger button */
+.btn--danger{
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+  font-weight: 900 !important;
+}
+.btn--danger:hover{ filter: brightness(0.96); }
 
 /* ====== Tablet (<= 1024) ====== */
 @media (max-width: 1024px) {
@@ -1150,206 +1346,128 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
     justify-self: end;
   }
 }
+/* ✅ 모바일(<=480): 셀렉트+수정+삭제+⋯ 한 줄로 예쁘게 */
+@media (max-width: 480px){
+  .actions{
+    display: grid;
+    grid-template-columns: 1fr auto auto 40px; /* select | 수정 | 삭제 | ⋯ */
+    gap: 8px;
+    align-items: center;
+  }
 
-/* ====== Small Mobile (<= 480) ====== */
-@media (max-width: 480px) {
-  .react-calendar__month-view__days{ gap: 6px; }
-
-  .react-calendar__tile{
-    min-height: 50px;
-    padding: 8px 3px;
+  /* 담당자 select는 한 줄에 포함 (전체폭 X) */
+  .actions .assigneeSelect,
+  .actions select{
+    width: 100%;
+    min-width: 0;               /* grid에서 줄어들 수 있게 */
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 999px;
     font-size: 12px;
   }
 
-  .react-calendar__tile{
-    padding: 10px 4px;
-    font-size: 13px;
-  }
-
-  .btn{
-    height: 38px;
-    padding: 0 12px;
-  }
-
-  .cal-marker{
-    bottom: 7px;
-  }
-  .cal-marker .dot::before{
-    width: 6px;               /* ✅ 더 작은 모바일 */
-    height: 6px;
-  }
-}
-
-@media (max-width: 420px){
-  /* 버튼/셀렉트가 있는 줄 */
-  .actions{
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    justify-content: flex-end !important;
-  }
-
-  /* 담당자 select 폭 줄이기 */
-  .actions select{
-    width: 112px !important;
-    max-width: 112px !important;
-    height: 34px !important;
-    padding: 0 10px !important;
-    border-radius: 12px !important;
-    border: 1px solid var(--border) !important;
-    background: #fff !important;
-    font-size: 12px !important;
-  }
-
-  /* 공통 버튼(수정/삭제) */
+  /* 수정/삭제 버튼: 길게 늘리지 말고 짧게 */
   .actions .btn-edit,
   .actions .btn-del{
-    -webkit-appearance: none !important;
-    appearance: none !important;
+    width: auto;                /* ✅ 핵심 */
+    min-width: 56px;
+    height: 34px;
+    padding: 0 12px;            /* ✅ 짧게 */
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    justify-content: center;
+  }
 
-    height: 34px !important;
-    padding: 0 12px !important;
+  /* ⋯ 버튼 */
+  .actions .btn-more{
+    width: 40px;
+    height: 34px;
+    border-radius: 999px;
+  }
 
+  /* 메뉴 폭은 살짝만 */
+  .moreMenu{
+    right: 0;
+    min-width: 180px;
+  }
+
+  .moreMenu{ min-width: 200px; border-radius: 16px; }
+  .moreItem{ padding: 11px 12px; }
+  .moreLabel{ font-size: 13px; }
+
+  .modal{ padding: 14px; border-radius: 16px; }
+  .modalTitle{ font-size: 16px; }
+  .modalWarn{ font-size: 13px; }
+}
+
+/* ====== Actions compact (<=420px) : 짧은 버튼 + 한 줄 배치 ====== */
+@media (max-width: 420px){
+  /* actions 한 줄로 정리 */
+  .dashItem .actions{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  /* 담당자 select 더 컴팩트 */
+  .dashItem .actions .assigneeSelect,
+  .dashItem .actions select{
+    width: 96px !important;
+    max-width: 96px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    border-radius: 999px !important;
+    font-size: 11px !important;
+  }
+
+  /* 수정/삭제 버튼: width 자동 + padding 줄이기 */
+  .dashItem .actions .btn-edit,
+  .dashItem .actions .btn-del{
+    width: auto !important;          /* ✅ 길이 자동 */
+    min-width: 54px !important;      /* ✅ 너무 작지 않게 */
+    height: 30px !important;
+    padding: 0 10px !important;      /* ✅ 짧게 */
     border-radius: 999px !important;
     font-size: 12px !important;
     font-weight: 800 !important;
     line-height: 1 !important;
-
     white-space: nowrap !important;
-    word-break: keep-all !important;
-
-    border: 1px solid transparent !important;
-    cursor: pointer !important;
   }
 
-  /* 수정 버튼 */
-  .actions .btn-edit{
-    background: #eef2ff !important;
-    color: var(--primary) !important;
-    border-color: #2563eb !important;
-  }
-
-  /* 삭제 버튼 */
-  .actions .btn-del{
-    background: #2563eb !important;
-    color: #ffffff !important;
-    border-color: #2563eb !important;
-  }
-
-  /* 눌림/호버 */
-  .actions .btn-edit:active,
-  .actions .btn-del:active{
-    transform: translateY(1px) !important;
+  /* 더보기(⋯) 버튼도 같은 톤으로 */
+  .dashItem .actions .btn-more{
+    width: 34px !important;
+    height: 30px !important;
+    border-radius: 999px !important;
   }
 }
 
-@media (max-width: 420px) {
-  .react-calendar{
-    padding: 10px 10px;
-    border-radius: 14px;
-  }
-
-  /* 상단 네비 버튼 작게 */
-  .react-calendar__navigation{
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .react-calendar__navigation button{
-    padding: 6px 8px;
-    border-radius: 10px;
-    font-size: 13px;
-  }
-
-  /* 요일 폰트 살짝 줄이기 */
-  .react-calendar__month-view__weekdays{
-    font-size: 12px;
-  }
-
-  /* 날짜 그리드 간격 줄이기 */
-  .react-calendar__month-view__days{
-    gap: 6px;
-  }
-
-  /* 타일 자체 축소 */
-  .react-calendar__tile{
-    min-height: 44px;       /* ✅ 더 컴팩트 */
-    padding: 8px 2px;
-    border-radius: 12px;
-    font-size: 12px;
-  }
-
-  /* 점(마커)도 iPhone에 맞게 */
-  .cal-marker{
-    bottom: 6px;
-    height: 10px;
-  }
-  .cal-marker .dot::before{
-    width: 5px;
-    height: 5px;
-  }
-}
-
-@media (max-width: 420px){
-  .dashList {
-    max-width: 100%;
-    padding: 0 4px;
-  }
-
-  .upcomingItem {
-    padding: 10px 12px;
-    gap: 8px;
-  }
-
-  .upcomingDate {
-    font-size: 12px;
-  }
-
-  /* 1행: pill 왼쪽, 날짜 오른쪽 */
-  .upcomingPhase{ grid-row: 1; justify-self: start; }
-
-  /* 2행: 제목 */
-  .upcomingTitle{
-    grid-row: 2;
-    white-space: normal;
-
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-
-    overflow: hidden;
-    line-clamp: 2;
-  }
-}
-
+/* ====== 더 작은 화면(<=390)에서 더 컴팩트 ====== */
 @media (max-width: 390px){
-  .dashItem .actions{ gap: 6px; }
+  .dashItem .actions{ gap: 5px !important; }
 
+  .dashItem .actions .assigneeSelect,
   .dashItem .actions select{
-    width: 88px;
-    max-width: 88px;
-    height: 30px;
-    padding: 0 8px;
-    font-size: 11px;
-    border-radius: 10px;
+    width: 88px !important;
+    max-width: 88px !important;
+    height: 28px !important;
+    font-size: 11px !important;
   }
 
   .dashItem .actions .btn-edit,
   .dashItem .actions .btn-del{
-    height: 30px;
-    padding: 0 10px;
-    font-size: 12px;
-    border-radius: 999px;
+    min-width: 50px !important;
+    height: 28px !important;
+    padding: 0 9px !important;
+    font-size: 11px !important;
   }
-  .upcomingTitle {
-  font-size: 14px;
-  font-weight: 700;
 
-  /* 줄 제한 */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-
-  line-clamp: 1;        /* 표준 */
-  overflow: hidden;
-}
+  .dashItem .actions .btn-more{
+    width: 32px !important;
+    height: 28px !important;
+  }
 }

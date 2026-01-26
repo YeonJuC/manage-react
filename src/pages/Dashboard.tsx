@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
-import type { Task } from "../store/tasks";
+import type { Task, addTask } from "../store/tasks";
 import { useState } from "react";
 
 function labelPhase(p: Task["phase"]) {
@@ -43,7 +43,7 @@ function PdfModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 export default function Dashboard() {
-  const { uid, ready, hydrated, cohort, setCohort, tasks } = useTasksStore();
+  const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave} = useTasksStore();
   const nav = useNavigate();
 
   const cohortTasks = useMemo(() => {
@@ -87,6 +87,28 @@ export default function Dashboard() {
   const goDate = (t: Task) => nav(`/calendar?date=${t.dueDate}`);
 
   const [open, setOpen] = useState(false);
+
+  const [newTitle, setNewTitle] = useState("");
+  const [newDueDate, setNewDueDate] = useState(todayYmd);
+  const [newPhase, setNewPhase] = useState<Task["phase"]>("during");
+
+  const onAddFromDash = () => {
+    if (!uid) return;
+    if (!cohort) return;
+    if (!newTitle.trim()) return;
+
+    setTasksAndSave((prev) =>
+      addTask(prev, {
+        cohort,
+        title: newTitle.trim(),
+        dueDate: newDueDate,
+        phase: newPhase,
+        assignee: "",
+      })
+    );
+
+    setNewTitle("");
+  };
 
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
   if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
