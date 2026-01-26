@@ -940,6 +940,16 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 }
 .btn--danger:hover{ filter: brightness(0.96); }
 
+.doneHeader { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+.doneToggleBtn { height:28px; padding:0 10px; font-size:12px; white-space:nowrap; border-radius:999px; }
+.doneHiddenText { font-size:12px; white-space:nowrap; }
+.phaseBadge { font-size:12px; padding:6px 10px; white-space:nowrap; border-radius:999px; }
+
+.progressText {
+  font-size: 14px;       /* 기본 (PC) */
+  white-space: nowrap;  /* 줄바꿈 방지 */
+}
+
 /* ====== Tablet (<= 1024) ====== */
 @media (max-width: 1024px) {
   .app{
@@ -1400,6 +1410,14 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   .modal{ padding: 14px; border-radius: 16px; }
   .modalTitle{ font-size: 16px; }
   .modalWarn{ font-size: 13px; }
+
+  .doneToggleBtn { font-size:11px; padding:0 8px; height:26px; }
+  .doneHiddenText { font-size:11px; }
+  .phaseBadge { font-size:10px; padding:4px 8px; }
+
+  .progressText {
+    font-size: 11px;     /* 핵심 */
+  }
 }
 
 /* ====== Actions compact (<=420px) : 짧은 버튼 + 한 줄 배치 ====== */
@@ -1470,4 +1488,6 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
     width: 32px !important;
     height: 28px !important;
   }
+
+  .phaseBadge { display:none; }
 }

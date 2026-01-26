@@ -284,7 +284,7 @@ export default function Tasks() {
 
     return (
       <section className="card" style={{ padding: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div className="doneHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <h3 style={{ margin: 0 }}>
               {phaseLabel[phase]}{" "}
@@ -295,8 +295,8 @@ export default function Tasks() {
 
             {doneList.length > 0 && (
               <button
-                className="btn btn--ghost"
-                style={{ height: 28, padding: "0 10px", fontSize: 12, borderRadius: 999 }}
+                className="btn btn--ghost doneToggleBtn"
+                style={{ borderRadius: 999 }}
                 onClick={() =>
                   setHideDone((prev) => ({ ...prev, [phase]: !prev[phase] }))
                 }
@@ -308,15 +308,14 @@ export default function Tasks() {
           </div>
 
           {hideDone[phase] && doneList.length > 0 && (
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            <div className="doneHiddenText" style={{ fontSize: 12, color: "var(--muted)" }}>
               완료된 할 일 {doneList.length}개 숨김
             </div>
           )}
 
           <span
+            className="phaseBadge"
             style={{
-              fontSize: 12,
-              padding: "6px 10px",
               borderRadius: 999,
               border: "1px solid var(--border)",
               background: phaseDone ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.08)",
@@ -482,7 +481,7 @@ export default function Tasks() {
           </select>
 
           {cohort && (
-            <span style={{ color: "var(--muted)" }}>
+            <span className="progressText" style={{ color: "var(--muted)" }}>
               전체 완료 {doneCount} / {totalCount}
               {totalCount > 0 && ` (${Math.round((doneCount / totalCount) * 100)}%)`}
             </span>
