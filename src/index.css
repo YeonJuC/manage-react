@@ -1031,6 +1031,28 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   margin-top: 2px;
 }
 
+.react-calendar__tile {
+  position: relative;
+}
+
+.holiday-dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 10px;
+  color: #e11d48;
+  font-weight: 700;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.holiday {
+  color: #e11d48;
+  font-weight: 800;
+}
+
 /* ====== Tablet (<= 1024) ====== */
 @media (max-width: 1024px) {
   .app{
