@@ -4,6 +4,16 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api/holiday": {
+        target: "https://apis.data.go.kr",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/holiday/, ""),
+      },
+    },
+  },
   base: "/manage-react/",   // ✅ GitHub Pages용 (레포 이름)
   resolve: {
     dedupe: ["react", "react-dom"],

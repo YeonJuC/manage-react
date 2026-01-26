@@ -950,6 +950,87 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   white-space: nowrap;  /* 줄바꿈 방지 */
 }
 
+.wsBox { position: relative; }
+.wsBtn{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.wsName{ white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+.wsCaret{ opacity: .7; }
+
+.wsMenu{
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.08);
+  padding: 10px;
+  z-index: 50;
+}
+.wsMenuTitle{ font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.wsMenuList{ display:grid; gap: 6px; max-height: 240px; overflow:auto; padding-right: 2px; }
+.wsItem{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: #f7f8ff;
+  cursor:pointer;
+  font-weight: 800;
+}
+.wsItem.is-active{
+  background: #eef2ff;
+  border-color: rgba(37,99,235,.35);
+}
+.wsDot{ opacity:.7; }
+.wsItemLabel{ flex:1; text-align:left; }
+
+.wsCreateBtn{
+  width:100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(37,99,235,.5);
+  background: #fff;
+  font-weight: 900;
+  cursor:pointer;
+}
+/* 공휴일 */
+.holiday {
+  color: #e11d48;
+  font-weight: 700;
+}
+
+/* 공휴일 이름 (칸 안에서 줄바꿈/넘침 방지) */
+.holiday-dot {
+  display: block;
+  font-size: 10px;
+  line-height: 1.1;
+  margin-top: 2px;
+  color: #e11d48;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-marker {
+  margin-top: 2px;
+}
+
 /* ====== Tablet (<= 1024) ====== */
 @media (max-width: 1024px) {
   .app{
@@ -1418,6 +1499,10 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   .progressText {
     font-size: 11px;     /* 핵심 */
   }
+}
+
+@media (max-width: 480px){
+  .wsMenu{ left: 0; right: 0; width: 100%; }
 }
 
 /* ====== Actions compact (<=420px) : 짧은 버튼 + 한 줄 배치 ====== */

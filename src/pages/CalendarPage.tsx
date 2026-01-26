@@ -6,12 +6,11 @@ import { addTask, deleteTask, setAssignee, toggleTask, type Task } from "../stor
 import { useLocation } from "react-router-dom";
 import { useTasksStore } from "../store/TasksContext";
 import { cohortDates } from "../data/cohortDates";
+import { getKoreanHolidays, type KRHoliday } from "../utils/holidays";
 
+/** 날짜 키: YYYY-MM-DD */
 function ymd(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return date.toLocaleDateString("sv-SE");
 }
 
 function phaseOf(dueDate: string, start: string, end: string) {
@@ -21,63 +20,47 @@ function phaseOf(dueDate: string, start: string, end: string) {
 }
 
 export default function CalendarPage() {
-  const [editing, setEditing] = useState<Task | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDate, setEditDate] = useState(""); // YYYY-MM-DD
-  
-  const openEdit = (task: Task) => {
-    setEditing(task);
-    setEditTitle(task.title);
-    setEditDate(task.dueDate); // dueDate가 string(YYYY-MM-DD)라 가정
-  };
-
-  const saveEdit = () => {
-    if (!editing) return;
-
-    const title = editTitle.trim();
-    if (!title) return;
-    if (!cohort) return;
-
-    const range = cohortDates[cohort as CohortKey];
-    const phase = range
-      ? phaseOf(editDate, range.start, range.end)
-      : editing.phase; // fallback: 기존값 유지
-
-    setTasksAndSave((prev) =>
-      prev.map((x) =>
-        x.id === editing.id
-          ? { ...x, title, dueDate: editDate, phase }
-          : x
-      )
-    );
-
-    setEditing(null);
-  };
-
   const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [newTitle, setNewTitle] = useState("");
 
-  const location = useLocation();
+  // ✅ 추가: 현재 보고 있는 캘린더 월(연도) 기준
+  const [activeStartDate, setActiveStartDate] = useState<Date>(new Date());
 
+  // 수정 모달
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  
+  // ✅ 공휴일 state
+  const [holidays, setHolidays] = useState<KRHoliday[]>([]);
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const q = params.get("date");
-    if (!q) return;
+    console.log("[holidays loaded]", holidays.length, holidays.slice(0, 5));
+  }, [holidays]);
 
-    const [y, m, d] = q.split("-").map(Number);
-    if (!y || !m || !d) return;
-    setSelectedDate(new Date(y, m - 1, d));
-  }, [location.search]);
+  // ✅ activeStartDate(연도) 바뀌면 공휴일 재조회
+  useEffect(() => {
+    const y = activeStartDate.getFullYear();
+    getKoreanHolidays(y)
+      .then(setHolidays)
+      .catch((e) => {
+        console.error(e);
+        setHolidays([]);
+      });
+  }, [activeStartDate]);
 
   const selectedYmd = useMemo(() => ymd(selectedDate), [selectedDate]);
 
+  const holidayOf = (date: Date) => holidays.find((h) => h.date === ymd(date));
+
+  /** 선택 차수의 task만 */
   const cohortTasks = useMemo(() => {
     if (!cohort) return [];
     return tasks.filter((t) => t.cohort === cohort);
   }, [tasks, cohort]);
 
+  /** dueDate -> tasks[] */
   const tasksByDate = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const t of cohortTasks) {
@@ -90,11 +73,37 @@ export default function CalendarPage() {
 
   const dayTasks = useMemo(() => tasksByDate.get(selectedYmd) ?? [], [tasksByDate, selectedYmd]);
 
+  /** 날짜별 상태(점 표시용) */
   const getDayStatus = (date: Date) => {
     const key = ymd(date);
     const list = tasksByDate.get(key) ?? [];
     if (list.length === 0) return "none";
     return list.every((t) => t.done) ? "done" : "todo";
+  };
+
+  /** 수정 모달 열기 */
+  const openEdit = (task: Task) => {
+    setEditing(task);
+    setEditTitle(task.title);
+    setEditDate(task.dueDate);
+  };
+
+  /** 수정 저장 */
+  const saveEdit = () => {
+    if (!editing) return;
+
+    const title = editTitle.trim();
+    if (!title) return;
+    if (!cohort) return;
+
+    const range = cohortDates[cohort as CohortKey];
+    const phase = range ? phaseOf(editDate, range.start, range.end) : editing.phase;
+
+    setTasksAndSave((prev) =>
+      prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x))
+    );
+
+    setEditing(null);
   };
 
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
@@ -122,7 +131,9 @@ export default function CalendarPage() {
             ))}
           </select>
 
-          <span style={{ color: "var(--muted)" }}>날짜 클릭 → 그날 해야 할 일 / 담당자 / 완료 체크</span>
+          <span style={{ color: "var(--muted)" }}>
+            날짜 클릭 → 그날 해야 할 일 / 담당자 / 완료 체크 (공휴일 자동 표시)
+          </span>
         </div>
       </div>
 
@@ -132,6 +143,9 @@ export default function CalendarPage() {
             <div style={{ color: "var(--muted)" }}>차수를 먼저 선택해줘.</div>
           ) : (
             <Calendar
+              onActiveStartDateChange={({ activeStartDate }) => {
+                if (activeStartDate) setActiveStartDate(activeStartDate);
+              }}
               onChange={(v) => {
                 const d = Array.isArray(v) ? v[0] : v;
                 if (d instanceof Date) setSelectedDate(d);
@@ -139,18 +153,33 @@ export default function CalendarPage() {
               value={selectedDate}
               tileClassName={({ date, view }) => {
                 if (view !== "month") return "";
+
+                const classes: string[] = [];
+
+                // 공휴일 클래스
+                if (holidayOf(date)) classes.push("holiday");
+
+                // 할 일 상태 클래스
                 const s = getDayStatus(date);
-                if (s === "done") return "cal-day-done";
-                if (s === "todo") return "cal-day-todo";
-                return "";
+                if (s === "done") classes.push("cal-day-done");
+                if (s === "todo") classes.push("cal-day-todo");
+
+                return classes.join(" ");
               }}
               tileContent={({ date, view }) => {
                 if (view !== "month") return null;
+
+                const h = holidayOf(date);
                 const s = getDayStatus(date);
+
                 return (
-                  <div className="cal-marker">
-                    <span className={`dot ${s === "todo" ? "on" : ""} ${s === "done" ? "done" : ""}`}>•</span>
-                  </div>
+                  <>
+                    {h && (
+                      <span className="holiday-dot">
+                        {h.name}{h.substitute ? " (대체)" : ""}
+                      </span>
+                    )}
+                  </>
                 );
               }}
             />
@@ -159,6 +188,16 @@ export default function CalendarPage() {
 
         <div className="card">
           <h3 style={{ marginTop: 0 }}>{selectedYmd}</h3>
+
+          {/* 선택한 날짜가 공휴일이면 이름 보여주기 */}
+          {cohort && (() => {
+            const h = holidayOf(selectedDate);
+            return h ? (
+              <div style={{ marginTop: 6, color: "#e11d48", fontWeight: 700, fontSize: 13 }}>
+                공휴일: {h.name}
+              </div>
+            ) : null;
+          })()}
 
           {cohort && (
             <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
@@ -177,10 +216,7 @@ export default function CalendarPage() {
                   if (!cohort) return;
 
                   const range = cohortDates[cohort as CohortKey];
-
-                  const phase = range
-                    ? phaseOf(selectedYmd, range.start, range.end)
-                    : "during";
+                  const phase = range ? phaseOf(selectedYmd, range.start, range.end) : "during";
 
                   setTasksAndSave((prev) =>
                     addTask(prev, {
@@ -202,7 +238,9 @@ export default function CalendarPage() {
           {!cohort && <div style={{ color: "var(--muted)" }}>차수를 선택하면 일정에 표시됩니다.</div>}
 
           {cohort && dayTasks.length === 0 && (
-            <div style={{ color: "var(--muted)", marginLeft: 5, marginTop: 16 }}>이 날짜에 등록된 할 일이 없습니다.</div>
+            <div style={{ color: "var(--muted)", marginLeft: 5, marginTop: 16 }}>
+              이 날짜에 등록된 할 일이 없습니다.
+            </div>
           )}
 
           {cohort && dayTasks.length > 0 && (
@@ -232,7 +270,8 @@ export default function CalendarPage() {
                         <option value="포스텍">포스텍</option>
                       </select>
 
-                      <button className="btn-edit"
+                      <button
+                        className="btn-edit"
                         onClick={() => openEdit(t)}
                         style={{
                           height: 34,
@@ -248,7 +287,8 @@ export default function CalendarPage() {
                       </button>
 
                       {t.id.includes(":custom:") && (
-                        <button className="btn-del"
+                        <button
+                          className="btn-del"
                           onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
                           style={{
                             height: 34,
@@ -272,6 +312,8 @@ export default function CalendarPage() {
               ))}
             </div>
           )}
+
+          {/* 수정 모달 */}
           {editing && (
             <div
               onClick={() => setEditing(null)}
