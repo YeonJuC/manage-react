@@ -11,8 +11,14 @@ import {
   saveTasks,
   type Task,
 } from "./tasks";
-import { materializeTemplatesForCohort, isDismissed, removeCustomTemplate, dismissTemplateForCohort } from "./customTemplates";
-import { cohortDates } from "../data/cohortDates"; 
+import {
+  materializeTemplatesForCohort,
+  isDismissed,
+  removeCustomTemplate,
+  dismissTemplateForCohort,
+} from "./customTemplates";
+import { cohortDates } from "../data/cohortDates";
+import { loadJSONLocal, saveJSONLocal } from "./storage";
 
 type Ctx = {
   uid: string | null;
@@ -76,21 +82,6 @@ function saveSeeded(ownerUid: string | null, m: Record<string, boolean>) {
 const LS_COHORT_BASE = "manage-react:cohort";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
-
-function saveJSON(key: string, value: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
-}
-function loadJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 function parseYmd(s: string) {
   const [y, m, d] = s.split("-").map(Number);
@@ -200,13 +191,12 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setHydrated(false);
 
     const fallbackToLocal = () => {
-      setCohort(loadJSON<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
-      setTasks(loadJSON<Task[]>(lsKey(LS_TASKS_BASE, ownerUid), []));
+      // ✅ storage 래퍼로 통일
+      setCohort(loadJSONLocal<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
+      setTasks(loadJSONLocal<Task[]>(lsKey(LS_TASKS_BASE, ownerUid), []));
     };
 
-    const timeout = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 8000)
-    );
+    const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8000));
 
     try {
       const job = Promise.all([loadCohort(ownerUid), loadTasks(ownerUid)]);
@@ -231,7 +221,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       setCohort(savedCohort ?? "");
       setTasks(filteredTasks);
 
-      saveJSON(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
+      // ✅ storage 래퍼로 통일
+      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
     } catch {
       fallbackToLocal();
     } finally {
@@ -278,7 +269,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     const ck = cohort as CohortKey;
 
     if (viewMode === "common") {
-      saveJSON(lsKey(LS_COHORT_BASE, ownerUid), cohort);
+      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), cohort);
       return;
     }
 
@@ -298,9 +289,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         }
 
         const toAdd = materializeTemplatesForCohort(ck);
-        const existsTemplateIds = new Set(
-          next.filter((t) => t.templateId).map((t) => t.templateId)
-        );
+        const existsTemplateIds = new Set(next.filter((t) => t.templateId).map((t) => t.templateId));
 
         for (const it of toAdd) {
           if (!it.templateId) continue;
@@ -320,31 +309,33 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           existsTemplateIds.add(it.templateId);
         }
 
-        saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
-        saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+        // ✅ storage 래퍼로 통일 (이게 핵심)
+        saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
+        saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
         return next;
       });
 
-      saveJSON(lsKey(LS_COHORT_BASE, ownerUid), ck);
+      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), ck);
     })();
   }, [uid, ownerUid, viewMode, hydrated, cohort]);
 
   // ✅ 수정/추가는 무조건 이 함수로만
-  // 🔥 변경점: saveTasks 실패를 캐치해서 바로 알림(저장 안 됐는데 화면만 바뀌는 문제 방지)
   const setTasksAndSave = (updater: (prev: Task[]) => Task[]) => {
     setTasks((prev) => {
       const next = updater(prev);
 
       if (ownerUid) {
-        saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
-        saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+        // ✅ storage 래퍼로 통일 (이게 새로고침 복구를 잡음)
+        saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
+        saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
       }
 
       if (ownerUid && hydrated && navigator.onLine) {
         void saveTasks(ownerUid, next).catch((e) => {
           console.error("[saveTasks failed]", e);
-          // 저장 실패를 사용자에게 명확히 표시
-          alert("⚠️ 저장에 실패했습니다. (권한/네트워크 문제)\n새로고침하면 이전 데이터로 돌아갈 수 있어요.\n콘솔 에러를 확인해 주세요.");
+          alert(
+            "⚠️ 저장에 실패했습니다. (권한/네트워크 문제)\n새로고침하면 이전 데이터로 돌아갈 수 있어요.\n콘솔 에러를 확인해 주세요."
+          );
         });
       }
 
@@ -356,9 +347,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     templateId: string,
     patch: Partial<Pick<Task, "title" | "assignee" | "dueDate" | "phase">>
   ) => {
-    setTasksAndSave((prev) =>
-      prev.map((t) => (t.templateId === templateId ? { ...t, ...patch } : t))
-    );
+    setTasksAndSave((prev) => prev.map((t) => (t.templateId === templateId ? { ...t, ...patch } : t)));
   };
 
   const bulkDeleteByTemplateId = (templateId: string) => {
@@ -378,11 +367,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setTasksAndSave((prev) => {
       let next = prev;
       const cohortKeys = Object.keys(cohortDates) as CohortKey[];
-      const exists = new Set(
-        next
-          .filter((t) => t.templateId)
-          .map((t) => `${t.cohort}|${t.templateId}`)
-      );
+      const exists = new Set(next.filter((t) => t.templateId).map((t) => `${t.cohort}|${t.templateId}`));
 
       for (const ck of cohortKeys) {
         const target = cohortDates[ck];
@@ -413,7 +398,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const setCohortAndSave = (nextCohort: CohortKey | "") => {
     setCohort(nextCohort);
-    if (ownerUid) saveJSON(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
+    if (ownerUid) saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
 
     if (!uid || !ownerUid || !hydrated) return;
     if (!nextCohort) return;
