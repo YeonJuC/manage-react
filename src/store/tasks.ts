@@ -6,23 +6,19 @@ import {
   saveJSONRemoteSafeTasks,
 } from "./storage";
 import type { CohortKey } from "../data/templates";
-// ⚠️ Vite(ESM)에서 named export 불일치가 있으면 런타임에서 바로 SyntaxError가 납니다.
-// ("... does not provide an export named ...")
-// 그래서 templates는 namespace import로 받아 안전하게 사용합니다.
 import * as Templates from "../data/templates";
 import { schedules } from "../data/schedule";
 import type { CohortSchedule } from "../data/schedule";
 
-// templates.ts의 export 형태가 달라도 런타임 에러 없이 동작하게 방어
 const taskTemplates = ((Templates as any).taskTemplates ?? []) as any[];
 
 export type Phase = "pre" | "during" | "post";
 
 export type Task = {
-  id: string; // `${cohort}:${tplKey}:${dueDate}` or `custom:${uuid}`
+  id: string;
   cohort: CohortKey;
   title: string;
-  dueDate: string; // YYYY-MM-DD
+  dueDate: string;
   phase: Phase;
   assignee: string;
   done: boolean;
@@ -33,7 +29,7 @@ export type Task = {
 
 type TasksPayload = {
   tasks: Task[];
-  updatedAt: number; // ms
+  updatedAt: number;
 };
 
 const LS_KEY_BASE = "manage-react:tasks";
@@ -41,7 +37,6 @@ const LS_COHORT_BASE = "manage-react:cohort";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
 
 function lsKey(base: string, ownerUid: string) {
-  // 로컬 캐시는 ownerUid별로 분리(내/공용 섞임 방지)
   return `${base}:${ownerUid}`;
 }
 
@@ -56,7 +51,6 @@ export async function loadCohort(uid: string): Promise<CohortKey | null> {
     }
     return null;
   }
-
   return remote;
 }
 
@@ -66,14 +60,11 @@ export async function saveCohort(uid: string, cohort: CohortKey) {
 }
 
 /**
- * ✅ 동기화 규칙
- * - Remote를 우선 시도
- * - Remote가 있으면 Remote를 "정답"으로 보고 Local 캐시를 갱신
- * - Remote가 없으면 Local 캐시만 사용
- *
- * ⚠️ 중요: load 단계에서 Local → Remote 자동 업로드는 하지 않는다.
- * (공용/내 전환, 권한/네트워크 순간 오류 시 로컬이 Remote를 덮어써서
- *  done 값이 풀리는 사고를 방지)
+ * ✅ 동기화 규칙(개선)
+ * - Remote가 있으면 무조건 Remote가 아니라,
+ *   (remoteUpdatedAt vs localUpdatedAt) 더 최신 쪽을 사용
+ * - Remote 읽기 실패/없음 → Local 사용
+ * - Remote가 비어있음 → Local 사용
  */
 export async function loadTasks(uid: string): Promise<Task[]> {
   const localTasks = loadJSONLocal<Task[]>(lsKey(LS_KEY_BASE, uid), []);
@@ -97,29 +88,30 @@ export async function loadTasks(uid: string): Promise<Task[]> {
   const remoteTasks = remotePayload.tasks ?? [];
   const remoteUpdatedAt = remotePayload.updatedAt ?? 0;
 
-  // ✅ Remote가 비어있으면(아직 저장된 적 없거나 권한/초기 상태)
-  // 로컬만 사용한다. (자동 업로드 금지)
+  // ✅ Remote가 비어있으면 → Local 사용
   if (remoteTasks.length === 0) {
     return localTasks;
   }
 
-  // ✅ Remote가 있으면 Remote를 기준으로 로컬 캐시 갱신
+  // ✅ 최신판정: local이 더 최신이면 local 사용
+  // (예: 오프라인/권한 문제로 저장 실패했는데 화면은 바뀐 경우)
+  if (localUpdatedAt > remoteUpdatedAt && localTasks.length > 0) {
+    return localTasks;
+  }
+
+  // ✅ Remote가 최신이면 Remote를 기준으로 로컬 캐시 갱신
   saveJSONLocal(lsKey(LS_KEY_BASE, uid), remoteTasks);
   saveJSONLocal(lsKey(LS_TASKS_AT_BASE, uid), remoteUpdatedAt || Date.now());
   return remoteTasks;
 }
 
 export async function saveTasks(uid: string, tasks: Task[]) {
-  // ✅ 빈 배열도 저장 허용 (삭제 동기화 필요)
   const updatedAt = Date.now();
 
-  // 로컬도 같이 갱신해서 "최신" 기준이 유지되게
   saveJSONLocal(lsKey(LS_KEY_BASE, uid), tasks);
   saveJSONLocal(lsKey(LS_TASKS_AT_BASE, uid), updatedAt);
 
-  // ✅ 공용/다중 사용자 편집 시 "스테일 덮어쓰기"로 데이터가 날아가는 것을 방지
-  // - Remote가 더 최신이면: id 기준 병합 저장
-  // - 내가 더 최신이면: 그대로 저장
+  // ✅ 안전 저장(스테일 덮어쓰기 방지)
   await saveJSONRemoteSafeTasks(uid, LS_KEY_BASE, { tasks, updatedAt } satisfies TasksPayload);
 }
 
@@ -197,11 +189,10 @@ export function addTask(
     createdAt: Date.now(),
     done: false,
     assignee: "",
-    ...input, // ✅ templateId/origin/assignee 들어오면 유지됨
+    ...input,
   };
   return [...prev, task];
 }
-
 
 export function updateTask(prev: Task[], id: string, patch: Partial<Task>) {
   return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));

@@ -19,13 +19,10 @@ type Ctx = {
   ready: boolean;
   hydrated: boolean;
 
-  // 현재 보고 있는 데이터(내 데이터 / 공용 데이터)
   viewMode: "mine" | "common";
   setViewMode: (m: "mine" | "common") => void;
-  // 실제 Firestore 경로에 쓰는 소유자 UID
   ownerUid: string | null;
 
-  // 공용 데이터 소유자 UID(특정 1명)
   commonOwnerUid: string | null;
   setCommonOwnerUid: (uid: string | null) => void;
 
@@ -50,18 +47,9 @@ type Ctx = {
   ) => void;
 
   bulkDeleteByTemplateId: (templateId: string) => void;
-
 };
 
 const TasksCtx = createContext<Ctx | null>(null);
-
-function readInitialCommonOwnerUid(): string | null {
-  const fromEnv = import.meta.env.VITE_COMMON_OWNER_UID as string | undefined;
-  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
-  if (typeof window === "undefined") return null;
-  const fromLS = localStorage.getItem("commonOwnerUid");
-  return fromLS && fromLS.trim() ? fromLS.trim() : null;
-}
 
 function getOwnerUid(authUid: string | null, viewMode: "mine" | "common", commonOwnerUid: string | null) {
   if (!authUid) return null;
@@ -73,7 +61,6 @@ function lsKey(base: string, ownerUid: string | null) {
   return ownerUid ? `${base}:${ownerUid}` : base;
 }
 
-// ✅ 로컬스토리지 키 (ownerUid별로 분리해서 섞임 방지)
 const LS_SEEDED_BASE = "manage-react:seededCohorts";
 function loadSeeded(ownerUid: string | null): Record<string, boolean> {
   try {
@@ -90,6 +77,20 @@ const LS_COHORT_BASE = "manage-react:cohort";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
 
+function saveJSON(key: string, value: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+function loadJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 function parseYmd(s: string) {
   const [y, m, d] = s.split("-").map(Number);
@@ -116,8 +117,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  // ✅ 공용 데이터(특정 상대 1명) UID
-  // 우선순위: (.env) VITE_COMMON_OWNER_UID → localStorage(commonOwnerUid)
   const [commonOwnerUid, setCommonOwnerUidState] = useState<string | null>(() => {
     const fromEnv = (import.meta.env.VITE_COMMON_OWNER_UID as string | undefined) ?? undefined;
     const fromLS = typeof window !== "undefined" ? localStorage.getItem("commonOwnerUid") ?? undefined : undefined;
@@ -131,9 +130,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         if (!next) localStorage.removeItem("commonOwnerUid");
         else localStorage.setItem("commonOwnerUid", next);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   const LS_VIEWMODE = "manage-react:viewMode";
@@ -141,9 +138,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     try {
       const raw = typeof window !== "undefined" ? localStorage.getItem(LS_VIEWMODE) : null;
       if (raw === "mine" || raw === "common") return raw;
-    } catch {
-      // ignore
-    }
+    } catch {}
     return "mine";
   });
 
@@ -151,14 +146,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setViewModeState(m);
     try {
       if (typeof window !== "undefined") localStorage.setItem(LS_VIEWMODE, m);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  // ✅ 링크로 접속했을 때 기본 화면: 공용 UID가 설정되어 있고,
-  //    '공용 소유자'가 아닌 사용자는 기본적으로 공용 화면을 먼저 보여줌.
-  //    (단, 사용자가 이미 viewMode를 선택해 저장해둔 경우는 존중)
   const didAutoPickViewMode = useRef(false);
   useEffect(() => {
     if (didAutoPickViewMode.current) return;
@@ -184,49 +174,20 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
     didAutoPickViewMode.current = true;
   }, [ready, uid, commonOwnerUid, setViewMode]);
+
   const ownerUid = useMemo(
     () => getOwnerUid(uid, viewMode, commonOwnerUid),
     [uid, viewMode, commonOwnerUid]
   );
 
-  // ✅ 현재 화면 상태(tasks/cohort)가 어떤 ownerUid 기준인지 추적
-  // (내/공용 토글 시, 이전 ownerUid의 state가 새 ownerUid에 저장되는 사고 방지)
   const [stateOwnerUid, setStateOwnerUid] = useState<string | null>(null);
-
-  // ✅ reload 경쟁(race) 방지용 시퀀스
   const reloadSeq = useRef(0);
 
   const [hydrated, setHydrated] = useState(false);
   const [cohort, setCohort] = useState<CohortKey | "">("");
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  useEffect(() => {
-    console.log("[TasksStore]", { uid, ownerUid, viewMode, ready, hydrated, cohort, tasksLen: tasks.length });
-  }, [uid, ownerUid, viewMode, ready, hydrated, cohort, tasks]);
-
-  // ✅ 온라인 복귀 시 자동 reload (다른 기기 변경사항 반영)
-  useEffect(() => {
-    if (!ownerUid) return;
-    const onOnline = () => void reload();
-    window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerUid]);
-
-  // 1) auth 상태
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUid(u?.uid ?? null);
-      setReady(true);
-    });
-    return () => unsub();
-  }, []);
-
-  // 2) uid/ownerUid/viewMode 바뀌면 로드
   const reload = useCallback(async () => {
-    console.log("[TasksStore][reload] start", { uid, ownerUid, viewMode });
-
-    // ✅ 이 reload 호출의 고유 번호 (늦게 끝난 이전 호출이 state를 덮어쓰지 않게)
     const seq = ++reloadSeq.current;
 
     if (!uid || !ownerUid) {
@@ -238,15 +199,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
     setHydrated(false);
 
-    const fallbackToLocal = (reason: unknown) => {
-      if (reason === "timeout") console.info("[TasksStore][reload] using local cache");
-      else console.warn("[TasksStore][reload] fallback local", reason);
-
+    const fallbackToLocal = () => {
       setCohort(loadJSON<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
       setTasks(loadJSON<Task[]>(lsKey(LS_TASKS_BASE, ownerUid), []));
     };
 
-    // 8초 타임아웃
     const timeout = new Promise<"timeout">((resolve) =>
       setTimeout(() => resolve("timeout"), 8000)
     );
@@ -256,44 +213,47 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       const res = await Promise.race([job, timeout]);
 
       if (res === "timeout") {
-        fallbackToLocal("timeout");
+        fallbackToLocal();
         return;
       }
 
       const [savedCohort, savedTasks] = res;
 
       const filteredTasks = (savedTasks ?? []).filter((t) => {
-        // 커스텀 템플릿에서 생성된 task이고
         if (t.origin === "custom" && t.templateId) {
-          // 이 기수에서 dismiss된 템플릿이면 제외
           return !isDismissed(String(savedCohort), t.templateId);
         }
         return true;
       });
 
-      // ✅ ownerUid가 바뀌었는데 늦게 도착한 결과면 무시
       if (seq !== reloadSeq.current) return;
 
       setCohort(savedCohort ?? "");
       setTasks(filteredTasks);
 
-
-      // ✅ cohort는 로컬 갱신(owners별로 분리)
       saveJSON(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
-
-      // ⚠️ tasks는 loadTasks()가 이미 "서버/로컬 최신판정 + 로컬 저장"까지 할 수 있으니
-      // 여기서 굳이 saveJSON(LS_KEY, ...)로 다시 덮어쓰지 않는 게 안정적
-      // (필요하면 남겨도 되지만 updatedAt을 같이 맞춰야 함)
-    } catch (e) {
-      console.warn("[TasksStore][reload] failed -> fallback local", e);
-      fallbackToLocal(e);
+    } catch {
+      fallbackToLocal();
     } finally {
       if (seq === reloadSeq.current) setHydrated(true);
     }
-  }, [uid, ownerUid, viewMode]);
+  }, [uid, ownerUid]);
 
-  // ✅ ownerUid가 바뀌는 순간: 화면 state를 즉시 "미로드" 상태로 돌려놓고
-  // 이전 ownerUid의 tasks/cohort가 새 ownerUid에 저장되는 것을 원천 차단
+  useEffect(() => {
+    if (!ownerUid) return;
+    const onOnline = () => void reload();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [ownerUid, reload]);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUid(u?.uid ?? null);
+      setReady(true);
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     if (!uid || !ownerUid) return;
     if (stateOwnerUid === ownerUid) return;
@@ -303,24 +263,20 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setCohort("");
   }, [uid, ownerUid, stateOwnerUid]);
 
-  // ✅ uid/ownerUid가 바뀌면 즉시 reload (내/공용 토글 포함)
   useEffect(() => {
     if (!uid || !ownerUid) return;
     void reload();
   }, [uid, ownerUid, reload]);
 
-  // 3) cohort 바뀌면 저장 + 템플릿 보장
   useEffect(() => {
     if (!uid || !ownerUid) return;
     if (!hydrated) return;
     if (!cohort) return;
 
-    // ✅ mine 모드에서는 ownerUid가 반드시 내 uid여야만 실행 (섞임 방지)
     if (viewMode === "mine" && ownerUid !== uid) return;
 
     const ck = cohort as CohortKey;
 
-    // ✅ 공용 모드에서는 자동 시드/원격 cohort 저장을 하지 않음(실수로 공용 데이터 변형 방지)
     if (viewMode === "common") {
       saveJSON(lsKey(LS_COHORT_BASE, ownerUid), cohort);
       return;
@@ -332,31 +288,23 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       setTasks((prev) => {
         let next = prev;
 
-        // ✅ 기본 템플릿은 "최초 1회만" 시드
         const seeded = loadSeeded(ownerUid);
         const seededKey = String(ck);
 
         if (!seeded[seededKey]) {
           next = ensureTemplatesForCohort(next, ck);
-
           seeded[seededKey] = true;
           saveSeeded(ownerUid, seeded);
         }
 
-        // ✅ 커스텀 템플릿은 매번 반영(중복은 스킵)
         const toAdd = materializeTemplatesForCohort(ck);
         const existsTemplateIds = new Set(
           next.filter((t) => t.templateId).map((t) => t.templateId)
         );
 
-
         for (const it of toAdd) {
           if (!it.templateId) continue;
-
-          // ⭐ 이미 있는 템플릿이면 스킵
           if (existsTemplateIds.has(it.templateId)) continue;
-
-          // ⭐ 이 기수에서 삭제된 템플릿이면 스킵
           if (isDismissed(String(ck), it.templateId)) continue;
 
           next = addTask(next, {
@@ -372,12 +320,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           existsTemplateIds.add(it.templateId);
         }
 
-        // 🔒 여기서는 절대 원격(saveTasks) 호출 금지.
-        // (초기 reload 때 prev가 비어있으면 템플릿 1개로 서버를 덮어쓰는 사고가 발생)
-        // 대신 로컬 캐시만 갱신하고, 실제 원격 저장은 사용자의 변경(setTasksAndSave)에서만 수행.
         saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
-
         return next;
       });
 
@@ -385,20 +329,23 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [uid, ownerUid, viewMode, hydrated, cohort]);
 
-  // 4) 수정은 무조건 이 함수로만
+  // ✅ 수정/추가는 무조건 이 함수로만
+  // 🔥 변경점: saveTasks 실패를 캐치해서 바로 알림(저장 안 됐는데 화면만 바뀌는 문제 방지)
   const setTasksAndSave = (updater: (prev: Task[]) => Task[]) => {
     setTasks((prev) => {
       const next = updater(prev);
 
-      // ✅ 오프라인/온라인 모두 로컬 최신화 (ownerUid별로 분리)
       if (ownerUid) {
         saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
       }
 
-      // ✅ 온라인이면 서버에도 저장 (공용 모드도 멤버 권한(editor/owner) 있으면 가능)
       if (ownerUid && hydrated && navigator.onLine) {
-        void saveTasks(ownerUid, next);
+        void saveTasks(ownerUid, next).catch((e) => {
+          console.error("[saveTasks failed]", e);
+          // 저장 실패를 사용자에게 명확히 표시
+          alert("⚠️ 저장에 실패했습니다. (권한/네트워크 문제)\n새로고침하면 이전 데이터로 돌아갈 수 있어요.\n콘솔 에러를 확인해 주세요.");
+        });
       }
 
       return next;
@@ -414,21 +361,14 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // ✅ 전 기수 일괄 삭제
   const bulkDeleteByTemplateId = (templateId: string) => {
-    // ✅ 1) 템플릿 자체 삭제(재생성 원천 차단)
     removeCustomTemplate(templateId);
-
-    // ✅ 2) 32~35 모두 dismiss 기록(혹시 로컬 꼬임/캐시 남아도 재추가 방지)
     (Object.keys(cohortDates) as CohortKey[]).forEach((ck) => {
       dismissTemplateForCohort(String(ck), templateId);
     });
-
-    // ✅ 3) 현재 tasks에서도 전부 제거
     setTasksAndSave((prev) => prev.filter((t) => t.templateId !== templateId));
   };
 
-  // ✅ 전 기수(32~35)에 템플릿 1개를 즉시 생성 반영
   const applyTemplateToAllCohorts = (tpl: {
     templateId: string;
     title: string;
@@ -437,11 +377,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   }) => {
     setTasksAndSave((prev) => {
       let next = prev;
-
-      // 32~35만 대상: cohortDates에 있는 것만
       const cohortKeys = Object.keys(cohortDates) as CohortKey[];
-
-      // 중복 방지: cohort|templateId
       const exists = new Set(
         next
           .filter((t) => t.templateId)
@@ -481,8 +417,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
     if (!uid || !ownerUid || !hydrated) return;
     if (!nextCohort) return;
-
-    // 공용 모드에서는 원격 cohort 저장을 하지 않음
     if (viewMode === "common") return;
 
     if (navigator.onLine) void saveCohort(ownerUid, nextCohort);
@@ -520,24 +454,4 @@ export function useTasksStore() {
   const v = useContext(TasksCtx);
   if (!v) throw new Error("useTasksStore must be used within TasksProvider");
   return v;
-}
-
-function loadJSON<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJSON<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
 }
