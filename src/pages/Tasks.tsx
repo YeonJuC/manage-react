@@ -63,7 +63,6 @@ export default function Tasks() {
     bulkDeleteByTemplateId,
   } = useTasksStore();
 
-  // ✅ 완료 항목 접기/펼치기(기본: 접힘)
   const [doneOpen, setDoneOpen] = useState<{ pre: boolean; during: boolean; post: boolean }>({
     pre: false,
     during: false,
@@ -79,7 +78,6 @@ export default function Tasks() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [q, setQ] = useState("");
 
-  // ✅ (UI 복원) 필터 드롭다운 없이, 검색만 유지하고 phase별로 섹션 분리
   const visible = useMemo(() => {
     let arr = tasks.filter((t) => t.cohort === cohort);
 
@@ -193,6 +191,9 @@ export default function Tasks() {
    * - 날짜는 (현재기수.start - 전기수.start) 만큼 shift
    * - phase는 현재기수 기간 기준으로 재계산
    * - 중복(제목+기한) 방지
+   *
+   * ✅ 추가 규칙
+   * - 전기수 복사로 넘어온 건 templateId 복사 금지 (⋯ 메뉴 안 뜨게)
    */
   const onBulkSeed = () => {
     if (!cohort) return;
@@ -203,6 +204,7 @@ export default function Tasks() {
     const cohortOrder = cohorts.map((c) => c.key);
     const idx = cohortOrder.indexOf(cohort as CohortKey);
     const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
+
     const prevDates = prevCohort ? cohortDates[prevCohort] : null;
 
     let added = 0,
@@ -242,14 +244,14 @@ export default function Tasks() {
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
             origin: src.origin ?? "custom",
-            templateId: undefined,   // ✅ 전기수 복사는 템플릿 아님
+            templateId: undefined, // ✅ 전기수 복사본은 템플릿 취급 X (⋯ 제거)
           });
 
           exists.set(key, next.length - 1);
           added++;
         }
       } else {
-        // ✅ seed + templates
+        // ✅ 첫 기수(32기) 등 "복사할 전기수 데이터가 없을 때"만 seed + templates로 채움
         const baseKey = cohorts.find((c) => c.label.includes("32기"))?.key as CohortKey | undefined;
         const base = baseKey ? cohortDates[baseKey] : null;
         const delta = base ? diffDays(parseYmd(target.start), parseYmd(base.start)) : 0;
@@ -329,7 +331,11 @@ export default function Tasks() {
     });
   };
 
-  // ✅ 차수 선택 후, 해당 차수에 할 일이 비어있으면 1회 자동 일괄등록
+  /**
+   * ✅ 새로고침 시 33기부터 비어버리는 문제 해결
+   * - 전기수 복사 케이스에서는 "전기수 tasks가 로드된 뒤"에만 자동 seed 실행
+   * - seeded 키는 실행 후에 찍음 (실행 전에 찍으면 실패해도 재시도 못함)
+   */
   useEffect(() => {
     if (!uid || !cohort) return;
     if (!hydrated) return;
@@ -337,14 +343,33 @@ export default function Tasks() {
     const alreadyKey = `seeded_${uid}_${cohort}`;
     if (localStorage.getItem(alreadyKey) === "1") return;
 
+    // 이미 해당 기수 데이터가 있으면 seeded 처리하고 종료
     const hasAny = tasks.some((t) => t.cohort === cohort);
-    if (hasAny) return;
+    if (hasAny) {
+      localStorage.setItem(alreadyKey, "1");
+      return;
+    }
 
-    localStorage.setItem(alreadyKey, "1");
+    // 전기수 복사 케이스는 전기수 데이터가 들어온 뒤에만 실행
+    const cohortOrder = cohorts.map((c) => c.key);
+    const idx = cohortOrder.indexOf(cohort as CohortKey);
+    const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
+
+    if (prevCohort) {
+      const prevLoaded = tasks.some((t) => t.cohort === prevCohort);
+      if (!prevLoaded) return; // ✅ 전기수 로딩 대기
+    }
+
     onBulkSeed();
+    localStorage.setItem(alreadyKey, "1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, cohort, hydrated]);
+  }, [uid, cohort, hydrated, tasks]);
 
+  /**
+   * ✅ (이미 넘어와서 ⋯ 뜨는 경우) 해당 기수의 templateId를 1회 제거
+   * - 전기수 복사본은 templateId 없어야 하므로, 기존 데이터 정리
+   * - 한 번만 실행하도록 localStorage로 가드
+   */
   useEffect(() => {
     if (!uid || !cohort) return;
     if (!hydrated) return;
@@ -352,7 +377,6 @@ export default function Tasks() {
     const key = `stripTpl_${uid}_${cohort}`;
     if (localStorage.getItem(key) === "1") return;
 
-    // 현재 기수에 있는 업무 중 templateId가 달려있는 것들 제거
     const hasTpl = tasks.some((t) => t.cohort === cohort && (t as any).templateId);
     if (!hasTpl) {
       localStorage.setItem(key, "1");
@@ -364,21 +388,21 @@ export default function Tasks() {
         if (t.cohort !== cohort) return t;
         if (!(t as any).templateId) return t;
         const copy: any = { ...t };
-        delete copy.templateId; // ✅ ⋯ 원인 제거
+        delete copy.templateId;
         return copy;
       })
     );
 
     localStorage.setItem(key, "1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, cohort, hydrated]);
+  }, [uid, cohort, hydrated, tasks]);
 
-  // ✅ 공통: 메뉴 닫기 (바깥 클릭)
+  // 메뉴 바깥 클릭 시 닫기
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest?.(".moreWrap")) return;
+      const el = e.target as HTMLElement | null;
+      if (!el) return;
+      if (el.closest?.(".moreWrap")) return;
       setMenuOpenId(null);
     };
     document.addEventListener("mousedown", onDoc);
@@ -400,7 +424,6 @@ export default function Tasks() {
 
     const renderRow = (t: Task) => (
       <div key={t.id} className="dashItem">
-        {/* ✅ LEFT: 내용 (CSS가 기대하는 구조: dashItem > label) */}
         <label style={{ flex: 1, minWidth: 0 }}>
           <input
             type="checkbox"
@@ -411,36 +434,26 @@ export default function Tasks() {
           />
 
           <div style={{ minWidth: 0 }}>
-            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`}>
-              {t.title}
-            </div>
+            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`}>{t.title}</div>
             <div className="dashItemDate">
               {t.dueDate} · 담당 {t.assignee?.trim() ? t.assignee : "-"}
             </div>
           </div>
         </label>
 
-        {/* ✅ RIGHT: 버튼(항상 오른쪽) */}
         <div className="actions">
-          {/* 담당 버튼을 pill로 통일 (동그라미 X) */}
-          <button
-            type="button"
-            className="btn-edit"
-            onClick={() => onSetAssignee(t.id)}
-            title="담당자"
-          >
+          {/* 담당/수정/삭제만 남게 */}
+          <button type="button" className="btn-edit" title="담당자" onClick={() => onSetAssignee(t.id)}>
             담당
           </button>
-
           <button type="button" className="btn-edit" onClick={() => onEditOpen(t)}>
             수정
           </button>
-
           <button type="button" className="btn-del" onClick={() => onDelete(t.id)}>
             삭제
           </button>
 
-          {/* 템플릿 옵션은 moreWrap / moreMenu CSS 사용 */}
+          {/* 템플릿 옵션(⋯)은 templateId 있을 때만 */}
           {t.templateId && (
             <div className="moreWrap">
               <button
