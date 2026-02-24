@@ -345,6 +345,34 @@ export default function Tasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, cohort, hydrated]);
 
+  useEffect(() => {
+    if (!uid || !cohort) return;
+    if (!hydrated) return;
+
+    const key = `stripTpl_${uid}_${cohort}`;
+    if (localStorage.getItem(key) === "1") return;
+
+    // 현재 기수에 있는 업무 중 templateId가 달려있는 것들 제거
+    const hasTpl = tasks.some((t) => t.cohort === cohort && (t as any).templateId);
+    if (!hasTpl) {
+      localStorage.setItem(key, "1");
+      return;
+    }
+
+    setTasksAndSave((prev) =>
+      prev.map((t) => {
+        if (t.cohort !== cohort) return t;
+        if (!(t as any).templateId) return t;
+        const copy: any = { ...t };
+        delete copy.templateId; // ✅ ⋯ 원인 제거
+        return copy;
+      })
+    );
+
+    localStorage.setItem(key, "1");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, cohort, hydrated]);
+
   // ✅ 공통: 메뉴 닫기 (바깥 클릭)
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
