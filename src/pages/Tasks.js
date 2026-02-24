@@ -1,409 +1,621 @@
-import { jsxs as _jsxs, jsx as _jsx } from "react/jsx-runtime";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cohorts } from "../data/templates";
-import { addTask, deleteTask, toggleTask, setAssignee, } from "../store/tasks";
+import { addTask, deleteTask, toggleTask, setAssignee } from "../store/tasks";
 import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
 import { useTasksStore } from "../store/TasksContext";
-import { upsertTemplateFromTask, loadCustomTemplates, dismissTemplateForCohort, materializeTemplatesForCohort, } from "../store/customTemplates";
+import { materializeTemplatesForCohort } from "../store/customTemplates";
+
 const phaseLabel = {
-    pre: "사전",
-    during: "교육 중",
-    post: "사후",
+  pre: "사전",
+  during: "교육 중",
+  post: "사후",
 };
-function ymdToday() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+
+function parseYmd(ymd) {
+  const [y, m, d] = ymd.split("-").map((n) => Number(n));
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
-function parseYmd(s) {
-    const [y, m, d] = s.split("-").map(Number);
-    return new Date(y, m - 1, d);
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
 }
-function fmtYmd(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-}
-function addDays(date, n) {
-    const copy = new Date(date);
-    copy.setDate(copy.getDate() + n);
-    return copy;
+function fmtYmd(date) {
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, "0");
+  const d = `${date.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 function diffDays(a, b) {
-    const ms = a.getTime() - b.getTime();
-    return Math.round(ms / (1000 * 60 * 60 * 24));
+  const ms = 24 * 60 * 60 * 1000;
+  const ax = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const bx = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((ax - bx) / ms);
 }
-function phaseOf(dueDate, start, end) {
-    if (dueDate < start)
-        return "pre";
-    if (dueDate <= end)
-        return "during";
-    return "post";
+function phaseOf(dueYmd, startYmd, endYmd) {
+  const due = parseYmd(dueYmd).getTime();
+  const start = parseYmd(startYmd).getTime();
+  const end = parseYmd(endYmd).getTime();
+  if (due < start) return "pre";
+  if (due > end) return "post";
+  return "during";
 }
+
 export default function Tasks() {
-    const scrollYRef = useRef(0);
-    const saveScroll = () => {
-        scrollYRef.current = window.scrollY || 0;
-    };
-    const restoreScroll = () => {
-        const y = scrollYRef.current;
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => window.scrollTo({ top: y }));
-        });
-    };
-    const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave, applyTemplateToAllCohorts, bulkUpdateByTemplateId, bulkDeleteByTemplateId } = useTasksStore();
-    const [editing, setEditing] = useState(null);
-    const [editTitle, setEditTitle] = useState("");
-    const [editDate, setEditDate] = useState("");
-    const [editPhase, setEditPhase] = useState("during");
-    const [menuOpenId, setMenuOpenId] = useState(null);
-    const menuRef = useRef(null);
-    const [confirmUpload, setConfirmUpload] = useState(null);
-    const [uploadDone, setUploadDone] = useState(false);
-    const [hideDone, setHideDone] = useState({
-        pre: true,
-        during: true,
-        post: true,
+  const {
+    uid,
+    ready,
+    hydrated,
+    cohort,
+    setCohort,
+    tasks,
+    setTasksAndSave,
+    applyTemplateToAllCohorts,
+    bulkUpdateByTemplateId,
+    bulkDeleteByTemplateId,
+  } = useTasksStore();
+
+  const [editing, setEditing] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editPhase, setEditPhase] = useState("during");
+
+  const [menuOpenId, setMenuOpenId] = useState(null);
+
+  const listRef = useRef(null);
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    let arr = tasks.filter((t) => t.cohort === cohort);
+    if (filter !== "all") arr = arr.filter((t) => t.phase === filter);
+    const query = q.trim();
+    if (query) {
+      const lower = query.toLowerCase();
+      arr = arr.filter(
+        (t) =>
+          t.title.toLowerCase().includes(lower) ||
+          (t.assignee ?? "").toLowerCase().includes(lower)
+      );
+    }
+    return arr;
+  }, [tasks, cohort, filter, q]);
+
+  const total = filtered.length;
+  const doneCount = filtered.filter((t) => t.done).length;
+
+  const onAdd = () => {
+    if (!cohort) return;
+    const title = window.prompt("업무명을 입력하세요");
+    if (!title || !title.trim()) return;
+    const dueDate = window.prompt("기한(YYYY-MM-DD) 입력", "");
+    if (!dueDate || !dueDate.trim()) return;
+    const due = dueDate.trim();
+    const target = cohortDates[cohort];
+    const phase = target ? phaseOf(due, target.start, target.end) : "during";
+
+    setTasksAndSave((prev) =>
+      addTask(prev, {
+        cohort,
+        title: title.trim(),
+        dueDate: due,
+        phase,
+        assignee: "",
+        origin: "custom",
+      })
+    );
+  };
+
+  const onEditOpen = (t) => {
+    setEditing(t);
+    setEditTitle(t.title);
+    setEditDate(t.dueDate);
+    setEditPhase(t.phase);
+  };
+
+  const onEditSave = () => {
+    if (!editing) return;
+    const title = editTitle.trim();
+    const dueDate = editDate.trim();
+    if (!title || !dueDate) return;
+
+    const target = cohortDates[editing.cohort];
+    const phase = target ? phaseOf(dueDate, target.start, target.end) : editPhase;
+
+    setTasksAndSave((prev) => {
+      const idx = prev.findIndex((x) => x.id === editing.id);
+      if (idx < 0) return prev;
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], title, dueDate, phase };
+      return copy;
     });
-    const [bulkEdit, setBulkEdit] = useState(null);
-    const [bulkTitle, setBulkTitle] = useState("");
-    const [bulkAssignee, setBulkAssignee] = useState("");
-    const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(null);
-    const [bulkDelete, setBulkDelete] = useState(null);
-    useEffect(() => {
-        if (!bulkEdit)
-            return;
-        setBulkTitle(bulkEdit.title);
-        setBulkAssignee(bulkEdit.assignee);
-    }, [bulkEdit]);
-    useEffect(() => {
-        const mq = window.matchMedia("(max-width: 480px)");
-        const apply = () => {
-            if (mq.matches) {
-                setHideDone({ pre: true, during: true, post: true }); // 📱 모바일이면 자동 접힘
-            }
-        };
-        apply(); // 최초 1회
-        mq.addEventListener?.("change", apply);
-        return () => mq.removeEventListener?.("change", apply);
-    }, []);
-    useEffect(() => {
-        if (!uploadDone)
-            return;
-        const id = setTimeout(() => setUploadDone(false), 2200);
-        return () => clearTimeout(id);
-    }, [uploadDone]);
-    useEffect(() => {
-        const onDown = (e) => {
-            if (!menuRef.current)
-                return;
-            if (!menuRef.current.contains(e.target))
-                setMenuOpenId(null);
-        };
-        const onKey = (e) => {
-            if (e.key === "Escape")
-                setMenuOpenId(null);
-        };
-        window.addEventListener("mousedown", onDown);
-        window.addEventListener("keydown", onKey);
-        return () => {
-            window.removeEventListener("mousedown", onDown);
-            window.removeEventListener("keydown", onKey);
-        };
-    }, []);
-    const openEdit = (t) => {
-        setEditing(t);
-        setEditTitle(t.title);
-        setEditDate(t.dueDate);
-        setEditPhase(t.phase);
-    };
-    const saveEdit = () => {
-        if (!editing)
-            return;
-        setTasksAndSave((prev) => prev.map((t) => t.id === editing.id
-            ? { ...t, title: editTitle, dueDate: editDate, phase: editPhase }
-            : t));
-        setEditing(null);
-    };
-    // 추가 폼 상태
-    const [newPhase, setNewPhase] = useState("during");
-    const [newTitle, setNewTitle] = useState("");
-    const [newDueDate, setNewDueDate] = useState(ymdToday());
-    const [newAssignee, setNewAssignee] = useState("");
-    const [saveAsTemplate, setSaveAsTemplate] = useState(false);
-    const filtered = useMemo(() => {
-        if (!cohort)
-            return [];
-        return tasks
-            .filter((t) => t.cohort === cohort)
-            .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
-    }, [tasks, cohort]);
-    const grouped = useMemo(() => {
-        return {
-            pre: filtered.filter((t) => t.phase === "pre"),
-            during: filtered.filter((t) => t.phase === "during"),
-            post: filtered.filter((t) => t.phase === "post"),
-        };
-    }, [filtered]);
-    const { doneCount, totalCount } = useMemo(() => {
-        const totalCount = filtered.length;
-        const doneCount = filtered.reduce((acc, t) => acc + (t.done ? 1 : 0), 0);
-        return { doneCount, totalCount };
-    }, [filtered]);
-    const onAdd = () => {
-        if (!uid)
-            return;
-        if (!cohort)
-            return;
-        if (!newTitle.trim())
-            return;
-        const title = newTitle.trim();
-        const dueDate = newDueDate;
-        const phase = newPhase;
-        const assignee = newAssignee;
-        setTasksAndSave((prev) => {
-            let next = addTask(prev, { cohort, title, dueDate, phase, assignee });
-            if (saveAsTemplate) {
-                const added = next[next.length - 1]; // addTask가 append면 OK
-                const templateId = upsertTemplateFromTask({ ...added, templateId: added.templateId }, cohort);
-                // ✅ 방금 추가한 task에 templateId/origin 저장
-                next = next.map((x) => x.id === added.id ? { ...x, templateId, origin: "custom" } : x);
-            }
-            return next;
-        });
-        setNewTitle("");
-    };
-    const bulkImport = () => {
-        if (!uid || !cohort)
-            return;
-        const baseKey = cohorts.find((c) => c.label === "32기(1차)")?.key;
-        if (!baseKey)
-            return alert('cohorts에 "32기(1차)" 라벨이 없어요.');
-        const base = cohortDates[baseKey];
-        const target = cohortDates[cohort];
-        if (!target)
-            return alert("선택한 차수에 대한 일정 정보가 없습니다.");
-        const delta = diffDays(parseYmd(target.start), parseYmd(base.start));
-        let added = 0, skipped = 0, updated = 0;
-        setTasksAndSave((prev) => {
-            let next = prev;
-            const exists = new Map();
-            next.forEach((t, idx) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, idx));
-            // 1) ✅ 32기 기본 업무일지(seed) → 차수 시작일 기준으로 날짜 shift
-            for (const item of seedTasks32) {
-                const title = item.title?.trim();
-                if (!title || !item.dueDate)
-                    continue;
-                const shiftedDue = fmtYmd(addDays(parseYmd(item.dueDate), delta));
-                const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
-                const key = `${cohort}|${shiftedDue}|${title}`;
-                const idx = exists.get(key);
-                if (idx !== undefined) {
-                    skipped++;
-                    const cur = next[idx];
-                    if ((!cur.assignee || cur.assignee === "") && item.assignee) {
-                        const copy = [...next];
-                        copy[idx] = { ...cur, assignee: item.assignee };
-                        next = copy;
-                        updated++;
-                    }
-                    continue;
-                }
-                next = addTask(next, {
-                    cohort,
-                    title,
-                    dueDate: shiftedDue,
-                    phase: shiftedPhase,
-                    assignee: item.assignee ?? "",
-                    origin: "seed",
-                });
-                exists.set(key, next.length - 1);
-                added++;
-            }
-            // 2) ✅ 사용자가 32기에서 '템플릿으로 저장'해둔 커스텀 업무도 같이 적용
-            //    - 템플릿은 offsetDays 기반이어서 목표 차수 start만 알면 자동 계산됨
-            //    - phase는 목표 차수 기간 기준으로 다시 계산(기간 밖으로 나가면 pre/post로 보정)
-            const tplItems = materializeTemplatesForCohort(cohort);
-            for (const t of tplItems) {
-                const title = t.title?.trim();
-                if (!title || !t.dueDate)
-                    continue;
-                const fixedPhase = phaseOf(t.dueDate, target.start, target.end);
-                const key = `${cohort}|${t.dueDate}|${title}`;
-                const idx = exists.get(key);
-                if (idx !== undefined) {
-                    skipped++;
-                    continue;
-                }
-                next = addTask(next, {
-                    cohort,
-                    title,
-                    dueDate: t.dueDate,
-                    phase: fixedPhase,
-                    assignee: t.assignee ?? "",
-                    templateId: t.templateId,
-                    origin: "custom",
-                });
-                exists.set(key, next.length - 1);
-                added++;
-            }
-            // alert는 밖에서
-            queueMicrotask(() => {
-                alert(`일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`);
-            });
-            return next;
-        });
-    };
-    // ✅ 차수 선택 후, 해당 차수에 할 일이 비어있다면 1회 자동으로 "일괄 등록" 실행
-    //    (반복 실행 방지: ownerUid+cohort 기준으로 로컬에 기록)
-    useEffect(() => {
-        if (!uid || !cohort)
-            return;
-        if (!hydrated)
-            return;
-        const already = (() => {
-            try {
-                const key = `manage-react:bulkImported:${uid}:${cohort}`;
-                return localStorage.getItem(key) === "1";
-            }
-            catch {
-                return false;
-            }
-        })();
-        if (already)
-            return;
-        const hasAny = tasks.some((t) => t.cohort === cohort);
-        if (hasAny) {
-            try {
-                localStorage.setItem(`manage-react:bulkImported:${uid}:${cohort}`, "1");
-            }
-            catch {
-                // ignore
-            }
-            return;
+
+    setEditing(null);
+  };
+
+  const onDelete = (id) => {
+    if (!window.confirm("삭제할까요?")) return;
+    setTasksAndSave((prev) => deleteTask(prev, id));
+  };
+
+  const onToggle = (id) => {
+    setTasksAndSave((prev) => toggleTask(prev, id));
+  };
+
+  const onSetAssignee = (id) => {
+    const who = window.prompt("담당자 이름(또는 공백)", "");
+    if (who === null) return;
+    setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
+  };
+
+  // ✅ 업무 일괄 등록(핵심 수정)
+  const onBulkSeed = () => {
+    if (!cohort) return;
+
+    const baseKey = cohorts.find((c) => c.label === "32기(1차)")?.key;
+    if (!baseKey) return alert('cohorts에 "32기(1차)" 라벨이 없어요.');
+
+    const base = cohortDates[baseKey];
+    const target = cohortDates[cohort];
+    if (!target) return alert("선택한 차수에 대한 일정 정보가 없습니다.");
+
+    const delta = diffDays(parseYmd(target.start), parseYmd(base.start));
+
+    let added = 0,
+      skipped = 0,
+      updated = 0;
+
+    setTasksAndSave((prev) => {
+      let next = prev;
+
+      const exists = new Map();
+      next.forEach((t, idx) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, idx));
+
+      // 1) ✅ 32기(기준 차수)에 '실제로 존재하는 업무들'을 그대로 복사해서 적용
+      //    - 32기에서 수동으로 추가한 업무(일괄등록에 없던 내용)까지 포함
+      //    - 날짜는 목표 차수 start 기준으로 shift, phase는 목표 차수 기간 기준으로 재계산
+      const baseTasks = prev.filter((t) => t.cohort === baseKey);
+      const shouldCopyFromBase = cohort !== baseKey && baseTasks.length > 0;
+
+      if (shouldCopyFromBase) {
+        for (const srcTask of baseTasks) {
+          const title = srcTask.title?.trim();
+          if (!title || !srcTask.dueDate) continue;
+
+          const shiftedDue = fmtYmd(addDays(parseYmd(srcTask.dueDate), delta));
+          const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
+
+          const key = `${cohort}|${shiftedDue}|${title}`;
+          const idx = exists.get(key);
+          if (idx !== undefined) {
+            skipped++;
+            continue;
+          }
+
+          next = addTask(next, {
+            cohort,
+            title,
+            dueDate: shiftedDue,
+            phase: shiftedPhase,
+            assignee: srcTask.assignee ?? "",
+            origin: srcTask.origin ?? "custom",
+            templateId: srcTask.templateId,
+          });
+          exists.set(key, next.length - 1);
+          added++;
         }
-        // 비어있으면 자동 등록
-        bulkImport();
-        try {
-            localStorage.setItem(`manage-react:bulkImported:${uid}:${cohort}`, "1");
+      } else {
+        // ✅ 32기이거나(기준 차수) / 아직 32기 업무가 비어있을 때는 seed + 템플릿으로 채움(기존 방식)
+        for (const item of seedTasks32) {
+          const title = item.title?.trim();
+          if (!title || !item.dueDate) continue;
+
+          const shiftedDue = fmtYmd(addDays(parseYmd(item.dueDate), delta));
+          const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
+
+          const key = `${cohort}|${shiftedDue}|${title}`;
+          const idx = exists.get(key);
+
+          if (idx !== undefined) {
+            skipped++;
+            const cur = next[idx];
+            if ((!cur.assignee || cur.assignee === "") && item.assignee) {
+              const copy = [...next];
+              copy[idx] = { ...cur, assignee: item.assignee };
+              next = copy;
+              updated++;
+            }
+            continue;
+          }
+
+          next = addTask(next, {
+            cohort,
+            title,
+            dueDate: shiftedDue,
+            phase: shiftedPhase,
+            assignee: item.assignee ?? "",
+            origin: "seed",
+          });
+          exists.set(key, next.length - 1);
+          added++;
         }
-        catch {
-            // ignore
+      }
+
+      // 2) ✅ 템플릿 적용은 base-copy 모드일 때는 생략(32기의 실제 업무 전체를 복사하므로 중복 방지)
+      if (!shouldCopyFromBase) {
+        const tplItems = materializeTemplatesForCohort(cohort);
+        for (const t of tplItems) {
+          const title = t.title?.trim();
+          if (!title || !t.dueDate) continue;
+
+          const fixedPhase = phaseOf(t.dueDate, target.start, target.end);
+          const key = `${cohort}|${t.dueDate}|${title}`;
+          const idx = exists.get(key);
+          if (idx !== undefined) {
+            skipped++;
+            continue;
+          }
+
+          next = addTask(next, {
+            cohort,
+            title,
+            dueDate: t.dueDate,
+            phase: fixedPhase,
+            assignee: t.assignee ?? "",
+            templateId: t.templateId,
+            origin: "custom",
+          });
+          exists.set(key, next.length - 1);
+          added++;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [uid, cohort, hydrated]);
-    const Section = ({ phase }) => {
-        const list = grouped[phase];
-        const doneList = list.filter((t) => t.done);
-        const todoList = list.filter((t) => !t.done);
-        const visibleList = hideDone[phase] ? todoList : list;
-        const phaseDone = list.length > 0 && list.every((t) => t.done);
-        return (_jsxs("section", { className: "card", style: { padding: 14 }, children: [_jsxs("div", { className: "doneHeader", style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [_jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10 }, children: [_jsxs("h3", { style: { margin: 0 }, children: [phaseLabel[phase], " ", _jsxs("span", { style: { fontSize: 12, color: "var(--muted)", marginLeft: 8 }, children: ["(", todoList.length, "/", list.length, ")"] })] }), doneList.length > 0 && (_jsx("button", { className: "btn btn--ghost doneToggleBtn", style: { borderRadius: 999 }, onClick: () => {
-                                        saveScroll(); // ⭐ 현재 위치 저장
-                                        setHideDone((prev) => ({ ...prev, [phase]: !prev[phase] }));
-                                        restoreScroll(); // ⭐ 다시 원위치
-                                    }, children: hideDone[phase] ? `완료된 할 일 펼치기` : "완료 접기" }))] }), hideDone[phase] && doneList.length > 0 && (_jsxs("div", { className: "doneHiddenText", style: { fontSize: 12, color: "var(--muted)" }, children: ["\uC644\uB8CC\uB41C \uD560 \uC77C ", doneList.length, "\uAC1C \uC228\uAE40"] })), _jsx("span", { className: "phaseBadge", style: {
-                                borderRadius: 999,
-                                border: "1px solid var(--border)",
-                                background: phaseDone ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.08)",
-                            }, children: list.length === 0 ? "없음" : phaseDone ? "완료" : "진행 중" })] }), _jsxs("div", { style: { display: "grid", gap: 8, marginTop: 12 }, children: [list.length === 0 && _jsx("div", { style: { color: "var(--muted)" }, children: "\uB4F1\uB85D\uB41C \uD560 \uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }), visibleList.map((t) => (_jsx("div", { className: "card", style: { padding: 12 }, children: _jsxs("div", { className: "dashItem", children: [_jsxs("label", { style: { display: "flex", gap: 10, alignItems: "center", minWidth: 0 }, children: [_jsx("input", { type: "checkbox", checked: t.done, onChange: () => {
-                                                    saveScroll();
-                                                    setTasksAndSave((prev) => toggleTask(prev, t.id));
-                                                    restoreScroll();
-                                                } }), _jsxs("div", { className: "dashItemContent", children: [_jsx("div", { className: `dashItemTitle ${t.done ? "is-done" : ""}`, children: t.title }), _jsx("div", { className: "dashItemDate", children: t.dueDate })] })] }), _jsxs("div", { className: "actions", children: [_jsxs("select", { value: t.assignee, onChange: (e) => {
-                                                    saveScroll();
-                                                    const v = e.target.value;
-                                                    setTasksAndSave((prev) => setAssignee(prev, t.id, v));
-                                                    restoreScroll();
-                                                }, className: "assigneeSelect", children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn-edit", onClick: () => openEdit(t), children: "\uC218\uC815" }), _jsx("button", { className: "btn-del", onClick: () => setTasksAndSave((prev) => {
-                                                    if (cohort && t.templateId) {
-                                                        dismissTemplateForCohort(String(cohort), t.templateId);
-                                                    }
-                                                    return deleteTask(prev, t.id);
-                                                }), children: "\uC0AD\uC81C" }), _jsxs("div", { className: "moreWrap", ref: menuOpenId === t.id ? menuRef : null, children: [_jsx("button", { type: "button", className: "btn-more", "aria-label": "\uB354\uBCF4\uAE30", "aria-expanded": menuOpenId === t.id, onClick: () => setMenuOpenId((cur) => (cur === t.id ? null : t.id)), children: "\u22EF" }), menuOpenId === t.id && (_jsx("div", { className: "moreMenu", role: "menu", children: [
-                                                            {
-                                                                key: "upload",
-                                                                label: "전 기수 업로드",
-                                                                icon: "⤴",
-                                                                danger: false,
-                                                                onClick: () => {
-                                                                    if (!cohort)
-                                                                        return;
-                                                                    setMenuOpenId(null);
-                                                                    setConfirmUpload(t); // ✅ 모달만 열기
-                                                                },
-                                                            },
-                                                            ...(t.templateId
-                                                                ? [
-                                                                    {
-                                                                        key: "bulkEdit",
-                                                                        label: "전 기수 일괄 수정",
-                                                                        icon: "✏️",
-                                                                        danger: false,
-                                                                        onClick: () => {
-                                                                            setMenuOpenId(null);
-                                                                            setBulkEdit({ templateId: t.templateId, title: t.title, assignee: t.assignee ?? "" });
-                                                                        },
-                                                                    },
-                                                                    {
-                                                                        key: "bulkDelete",
-                                                                        label: "전 기수 일괄 삭제",
-                                                                        icon: "🗑",
-                                                                        danger: true,
-                                                                        onClick: () => {
-                                                                            setMenuOpenId(null);
-                                                                            setBulkDelete({ templateId: t.templateId, title: t.title });
-                                                                        },
-                                                                    },
-                                                                ]
-                                                                : []),
-                                                        ].map((item) => (_jsxs("button", { type: "button", className: `moreItem ${item.danger ? "moreItem--danger" : ""}`, role: "menuitem", onClick: item.onClick, children: [_jsx("span", { className: "moreIcon", "aria-hidden": true, children: item.icon }), _jsx("span", { className: "moreLabel", children: item.label })] }, item.key))) }))] })] })] }) }, t.id)))] })] }));
-    };
-    if (!ready)
-        return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB85C\uB529 \uC911\u2026" });
-    if (!uid)
-        return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4." });
-    if (!hydrated)
-        return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB370\uC774\uD130 \uBD88\uB7EC\uC624\uB294 \uC911\u2026" });
-    return (_jsxs("div", { children: [_jsx("h1", { children: "\uD560 \uC77C" }), _jsx("div", { className: "card", style: { marginTop: 12 }, children: _jsxs("div", { style: { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }, children: [_jsx("strong", { children: "\uCC28\uC218 \uC120\uD0DD" }), _jsxs("select", { value: cohort, onChange: (e) => setCohort(e.target.value), style: { height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uC120\uD0DD\uD558\uC138\uC694" }), cohorts.map((c) => (_jsx("option", { value: c.key, children: c.label }, c.key)))] }), cohort && (_jsxs("span", { className: "progressText", style: { color: "var(--muted)" }, children: ["\uC804\uCCB4 \uC644\uB8CC ", doneCount, " / ", totalCount, totalCount > 0 && ` (${Math.round((doneCount / totalCount) * 100)}%)`] }))] }) }), _jsx("div", { className: "card", style: { marginTop: 12, padding: 14 }, children: _jsxs("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }, children: [_jsx("strong", { children: "\uD560 \uC77C \uCD94\uAC00" }), _jsxs("select", { value: newPhase, onChange: (e) => setNewPhase(e.target.value), style: { height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "pre", children: "\uC0AC\uC804" }), _jsx("option", { value: "during", children: "\uAD50\uC721 \uC911" }), _jsx("option", { value: "post", children: "\uC0AC\uD6C4" })] }), _jsx("input", { value: newTitle, onChange: (e) => setNewTitle(e.target.value), placeholder: "\uD560 \uC77C \uC81C\uBAA9", style: { height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)", width: 260 } }), _jsx("input", { type: "date", value: newDueDate, onChange: (e) => setNewDueDate(e.target.value), style: { height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" } }), _jsxs("select", { value: newAssignee, onChange: (e) => setNewAssignee(e.target.value), style: { height: 36, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn", style: { height: 36, borderRadius: 10 }, disabled: !cohort, onClick: onAdd, children: "\uCD94\uAC00" }), cohort && (_jsx("button", { className: "btn btn--ghost", onClick: bulkImport, style: { marginLeft: "auto", fontWeight: 800 }, children: "\uC77C\uAD04 \uB4F1\uB85D(\uC5C5\uBB34\uC77C\uC9C0)" })), !cohort && _jsx("span", { style: { color: "var(--muted)" }, children: "\uCC28\uC218\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574\uC918." })] }) }), _jsxs("div", { style: { marginTop: 12, display: "grid", gap: 12 }, children: [_jsx(Section, { phase: "pre" }), _jsx(Section, { phase: "during" }), _jsx(Section, { phase: "post" })] }), editing && (_jsx("div", { className: "modalOverlay", onClick: () => setEditing(null), children: _jsxs("div", { className: "modal", onClick: (e) => e.stopPropagation(), children: [_jsx("h3", { style: { marginTop: 0 }, children: "\uD560 \uC77C \uC218\uC815" }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uC81C\uBAA9" }), _jsx("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value) })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uB0A0\uC9DC" }), _jsx("input", { type: "date", value: editDate, onChange: (e) => setEditDate(e.target.value) })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uB2E8\uACC4" }), _jsxs("select", { value: editPhase, onChange: (e) => setEditPhase(e.target.value), children: [_jsx("option", { value: "pre", children: "\uC0AC\uC804" }), _jsx("option", { value: "during", children: "\uAD50\uC721\uC911" }), _jsx("option", { value: "post", children: "\uC0AC\uD6C4" })] })] }), _jsxs("div", { className: "modalActions", children: [_jsx("button", { className: "btn btn--ghost", onClick: () => setEditing(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn", onClick: saveEdit, children: "\uC800\uC7A5" })] })] }) })), confirmUpload && (_jsx("div", { className: "modalOverlay", onClick: () => setConfirmUpload(null), children: _jsxs("div", { className: "modal", onClick: (e) => e.stopPropagation(), children: [_jsx("h3", { style: { marginTop: 0 }, children: "\uC804 \uAE30\uC218 \uC5C5\uB85C\uB4DC" }), _jsxs("p", { style: { marginBottom: 16, lineHeight: 1.5 }, children: [_jsxs("strong", { children: ["\u300C", confirmUpload.title, "\u300D"] }), _jsx("br", {}), "\uC774 \uD560 \uC77C\uC744 ", _jsx("b", { children: "\uBAA8\uB4E0 \uAE30\uC218(32~35)" }), "\uC5D0 \uC5C5\uB85C\uB4DC\uD560\uAE4C\uC694?"] }), _jsxs("div", { className: "modalActions", children: [_jsx("button", { className: "btn btn--ghost", onClick: () => setConfirmUpload(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn", onClick: () => {
-                                        if (!cohort)
-                                            return;
-                                        const t = confirmUpload;
-                                        // 1) 템플릿 저장
-                                        const templateId = upsertTemplateFromTask({ ...t, templateId: t.templateId }, cohort);
-                                        // 2) 현재 task에도 templateId 기록
-                                        setTasksAndSave((prev) => prev.map((x) => x.id === t.id ? { ...x, templateId, origin: "custom" } : x));
-                                        // 3) 전 기수 즉시 반영
-                                        const list = loadCustomTemplates();
-                                        const tpl = list.find((x) => x.id === templateId);
-                                        if (tpl) {
-                                            applyTemplateToAllCohorts({
-                                                templateId,
-                                                title: tpl.title,
-                                                assignee: tpl.assignee ?? "",
-                                                offsetDays: tpl.offsetDays,
-                                            });
-                                        }
-                                        setConfirmUpload(null);
-                                        setUploadDone(true); // ✅ 완료 팝업
-                                    }, children: "\uC804 \uAE30\uC218 \uC5C5\uB85C\uB4DC" })] })] }) })), uploadDone && (_jsx("div", { className: "toast", children: "\uD83C\uDF89 \uC804 \uAE30\uC218 \uC5C5\uB85C\uB4DC\uAC00 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4" })), bulkEdit && (_jsx("div", { className: "modalOverlay", onClick: () => setBulkEdit(null), children: _jsxs("div", { className: "modal", onClick: (e) => e.stopPropagation(), children: [_jsx("h3", { style: { marginTop: 0 }, children: "\uC804 \uAE30\uC218 \uC77C\uAD04 \uC218\uC815" }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uC81C\uBAA9" }), _jsx("input", { value: bulkTitle, onChange: (e) => setBulkTitle(e.target.value) })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uB2F4\uB2F9\uC790" }), _jsxs("select", { value: bulkAssignee, onChange: (e) => setBulkAssignee(e.target.value), children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] })] }), _jsxs("div", { className: "modalActions", children: [_jsx("button", { className: "btn btn--ghost", onClick: () => setBulkEdit(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn", onClick: () => {
-                                        const title = bulkTitle.trim();
-                                        if (!title)
-                                            return;
-                                        bulkUpdateByTemplateId(bulkEdit.templateId, {
-                                            title,
-                                            assignee: bulkAssignee,
-                                        });
-                                        setBulkEdit(null);
-                                        alert("✅ 전 기수 일괄 수정 완료");
-                                    }, children: "\uC804 \uAE30\uC218 \uC218\uC815" })] })] }) })), bulkDelete && (_jsx("div", { className: "modalOverlay", onClick: () => setBulkDelete(null), children: _jsxs("div", { className: "modal modal--danger", onClick: (e) => e.stopPropagation(), children: [_jsxs("div", { className: "modalHead", children: [_jsx("h3", { className: "modalTitle", children: "\uC804 \uAE30\uC218 \uC77C\uAD04 \uC0AD\uC81C" }), _jsx("button", { className: "modalX", onClick: () => setBulkDelete(null), "aria-label": "\uB2EB\uAE30", children: "\u2715" })] }), _jsxs("div", { className: "modalBody", children: [_jsxs("p", { className: "modalMain", children: [_jsxs("b", { children: ["\u300C", bulkDelete.title, "\u300D"] }), _jsx("br", {}), "\uC774 \uD560 \uC77C\uC744 ", _jsx("b", { children: "\uBAA8\uB4E0 \uAE30\uC218(32~35)" }), "\uC5D0\uC11C \uC644\uC804\uD788 \uC0AD\uC81C\uD560\uAE4C\uC694?"] }), _jsxs("div", { className: "modalWarn", children: [_jsx("span", { className: "modalWarnIcon", "aria-hidden": true, children: "\u26A0\uFE0F" }), _jsx("span", { children: "\uC774 \uC791\uC5C5\uC740 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." })] })] }), _jsxs("div", { className: "modalActions modalActions--right", children: [_jsx("button", { className: "btn btn--ghost", onClick: () => setBulkDelete(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn btn--danger", onClick: () => {
-                                        // ✅ 여기서 전 기수 일괄 삭제 실행
-                                        bulkDeleteByTemplateId(bulkDelete.templateId); // <- TasksContext에 만든 함수명 그대로 쓰기
-                                        setBulkDelete(null);
-                                        alert("✅ 전 기수 일괄 삭제 완료");
-                                    }, children: "\uC804 \uAE30\uC218 \uC0AD\uC81C" })] })] }) }))] }));
+      }
+
+      queueMicrotask(() => {
+        alert(
+          `일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`
+        );
+      });
+
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!uid || !cohort) return;
+    if (!hydrated) return;
+
+    const alreadyKey = `seeded_${uid}_${cohort}`;
+    if (localStorage.getItem(alreadyKey) === "1") return;
+
+    const hasAny = tasks.some((t) => t.cohort === cohort);
+    if (hasAny) return;
+
+    localStorage.setItem(alreadyKey, "1");
+    onBulkSeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, cohort, hydrated]);
+
+  if (!ready) return <div style={{ padding: 16 }}>로딩중...</div>;
+
+  return (
+    <div className="page-wrap" style={{ padding: 16 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <h2 style={{ margin: 0 }}>할일</h2>
+
+        <select
+          value={cohort ?? ""}
+          onChange={(e) => setCohort(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd" }}
+        >
+          <option value="" disabled>
+            차수 선택
+          </option>
+          {cohorts.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={onAdd}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          + 추가
+        </button>
+
+        <button
+          type="button"
+          onClick={onBulkSeed}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          업무 일괄 등록
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="검색(업무/담당자)"
+          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+        />
+
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+        >
+          <option value="all">전체</option>
+          <option value="pre">사전</option>
+          <option value="during">교육 중</option>
+          <option value="post">사후</option>
+        </select>
+      </div>
+
+      <div style={{ marginTop: 10, opacity: 0.8 }}>
+        총 {total}개 / 완료 {doneCount}개
+      </div>
+
+      <div ref={listRef} style={{ marginTop: 14, display: "grid", gap: 10 }}>
+        {filtered.map((t) => (
+          <div
+            key={t.id}
+            style={{
+              border: "1px solid #e6e6e6",
+              borderRadius: 14,
+              padding: 12,
+              background: "#fff",
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => onToggle(t.id)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 999,
+                  border: "1px solid #ddd",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+                title="완료 토글"
+              >
+                {t.done ? "✓" : ""}
+              </button>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, textDecoration: t.done ? "line-through" : "none" }}>
+                  {t.title}
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.8, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <span>기한: {t.dueDate}</span>
+                  <span>구간: {phaseLabel[t.phase]}</span>
+                  <span>담당: {t.assignee || "-"}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                ⋯
+              </button>
+            </div>
+
+            {menuOpenId === t.id && (
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEditOpen(t);
+                    setMenuOpenId(null);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  수정
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSetAssignee(t.id);
+                    setMenuOpenId(null);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  담당자
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(t.id);
+                    setMenuOpenId(null);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  삭제
+                </button>
+
+                {t.templateId && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
+                        if (!ok) return;
+                        applyTemplateToAllCohorts(t.templateId);
+                        setMenuOpenId(null);
+                      }}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid #ddd",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      템플릿 전체 적용
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
+                        if (!ok) return;
+                        const nt = window.prompt("새 제목(공백이면 유지)", t.title) ?? "";
+                        const nd = window.prompt("새 기한(YYYY-MM-DD, 공백이면 유지)", t.dueDate) ?? "";
+                        bulkUpdateByTemplateId(t.templateId, {
+                          title: nt.trim() ? nt.trim() : undefined,
+                          dueDate: nd.trim() ? nd.trim() : undefined,
+                        });
+                        setMenuOpenId(null);
+                      }}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid #ddd",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      템플릿 일괄 수정
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
+                        if (!ok) return;
+                        bulkDeleteByTemplateId(t.templateId);
+                        setMenuOpenId(null);
+                      }}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        border: "1px solid #ddd",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      템플릿 일괄 삭제
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.3)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+          }}
+          onClick={() => setEditing(null)}
+        >
+          <div
+            style={{
+              width: "min(520px, 100%)",
+              background: "#fff",
+              borderRadius: 16,
+              padding: 14,
+              border: "1px solid #eee",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>업무 수정</h3>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="업무명"
+                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+              />
+              <input
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                placeholder="기한 YYYY-MM-DD"
+                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+              />
+              <select
+                value={editPhase}
+                onChange={(e) => setEditPhase(e.target.value)}
+                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+              >
+                <option value="pre">사전</option>
+                <option value="during">교육 중</option>
+                <option value="post">사후</option>
+              </select>
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", fontWeight: 800 }}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={onEditSave}
+                  style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", fontWeight: 800 }}
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
