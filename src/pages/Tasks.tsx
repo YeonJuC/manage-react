@@ -355,35 +355,91 @@ export default function Tasks() {
       phase === "pre"
         ? "dashPill dashPill--pre"
         : phase === "during"
-          ? "dashPill dashPill--during"
-          : "dashPill dashPill--post";
+        ? "dashPill dashPill--during"
+        : "dashPill dashPill--post";
 
+    // ✅ 행 렌더(레이아웃 개선: 내용 왼쪽 / 버튼 오른쪽)
     const renderRow = (t: Task) => (
-      <div key={t.id} className="dashItem">
-        <label>
+      <div
+        key={t.id}
+        className="dashItem"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        {/* ✅ LEFT: 체크 + 내용 */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            flex: 1,
+            minWidth: 0, // 중요: 글 길어도 버튼 밀리지 않게
+          }}
+        >
           <input
             type="checkbox"
             checked={!!t.done}
             onChange={() => onToggle(t.id)}
-            style={{ width: 18, height: 18, accentColor: "#2563eb", cursor: "pointer" }}
+            style={{
+              width: 18,
+              height: 18,
+              marginTop: 3,
+              accentColor: "#2563eb",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
             aria-label="완료 토글"
           />
+
           <div style={{ minWidth: 0 }}>
-            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`}>{t.title}</div>
-            <div className="dashItemDate">
+            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`} style={{ wordBreak: "keep-all" }}>
+              {t.title}
+            </div>
+            <div className="dashItemDate" style={{ marginTop: 4 }}>
               {t.dueDate} · 담당 {t.assignee?.trim() ? t.assignee : "-"}
             </div>
           </div>
-        </label>
+        </div>
 
-        <div className="actions">
-          <button type="button" className="btn-more" title="담당자" onClick={() => onSetAssignee(t.id)}>
+        {/* ✅ RIGHT: 버튼 */}
+        <div
+          className="actions"
+          style={{
+            display: "flex",
+            gap: 8,
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "flex-end",
+            flexWrap: "wrap", // 모바일에서 자연스럽게 줄바꿈
+          }}
+        >
+          <button
+            type="button"
+            className="btn-more"
+            title="담당자"
+            onClick={() => onSetAssignee(t.id)}
+            style={{ whiteSpace: "nowrap" }}
+          >
             담당
           </button>
-          <button type="button" className="btn-edit" onClick={() => onEditOpen(t)}>
+          <button
+            type="button"
+            className="btn-edit"
+            onClick={() => onEditOpen(t)}
+            style={{ whiteSpace: "nowrap" }}
+          >
             수정
           </button>
-          <button type="button" className="btn-del" onClick={() => onDelete(t.id)}>
+          <button
+            type="button"
+            className="btn-del"
+            onClick={() => onDelete(t.id)}
+            style={{ whiteSpace: "nowrap" }}
+          >
             삭제
           </button>
 
@@ -394,6 +450,7 @@ export default function Tasks() {
               onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
               aria-expanded={menuOpenId === t.id}
               title="템플릿 옵션"
+              style={{ whiteSpace: "nowrap" }}
             >
               ⋯
             </button>
@@ -401,7 +458,16 @@ export default function Tasks() {
         </div>
 
         {t.templateId && menuOpenId === t.id && (
-          <div style={{ gridColumn: "1 / -1", marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div
+            style={{
+              width: "100%",
+              marginTop: 10,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              justifyContent: "flex-end", // 옵션도 오른쪽 정렬
+            }}
+          >
             <button
               type="button"
               className="btn btn--ghost"
