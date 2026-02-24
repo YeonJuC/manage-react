@@ -108,11 +108,28 @@ export async function loadTasks(uid: string): Promise<Task[]> {
 export async function saveTasks(uid: string, tasks: Task[]) {
   const updatedAt = Date.now();
 
-  saveJSONLocal(lsKey(LS_KEY_BASE, uid), tasks);
+  // ✅ Firestore 저장 전에 undefined 필드 제거
+  const cleaned = tasks.map((t) => {
+    const x: any = { ...t };
+
+    // Firestore는 undefined 금지 → 있으면 key 자체를 지움
+    Object.keys(x).forEach((k) => {
+      if (x[k] === undefined) delete x[k];
+    });
+
+    // 혹시라도 assignee가 undefined면 빈 문자열로 통일 (Task 타입상 string이어야 함)
+    if (x.assignee === undefined || x.assignee === null) x.assignee = "";
+
+    return x as Task;
+  });
+
+  saveJSONLocal(lsKey(LS_KEY_BASE, uid), cleaned);
   saveJSONLocal(lsKey(LS_TASKS_AT_BASE, uid), updatedAt);
 
-  // ✅ 안전 저장(스테일 덮어쓰기 방지)
-  await saveJSONRemoteSafeTasks(uid, LS_KEY_BASE, { tasks, updatedAt } satisfies TasksPayload);
+  await saveJSONRemoteSafeTasks(uid, LS_KEY_BASE, {
+    tasks: cleaned,
+    updatedAt,
+  } satisfies TasksPayload);
 }
 
 function formatYMD(d: Date) {
