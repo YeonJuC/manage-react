@@ -496,7 +496,12 @@ export default function Tasks() {
                       onClick={() => {
                         const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
                         if (!ok) return;
-                        applyTemplateToAllCohorts(t.templateId!);
+                        applyTemplateToAllCohorts({
+                          templateId: t.templateId!,
+                          title: t.title,
+                          assignee: t.assignee ?? "",
+                          offsetDays: 0, // ✅ 그대로 적용(날짜 이동 없음)
+                        });
                         setMenuOpenId(null);
                       }}
                       style={{
