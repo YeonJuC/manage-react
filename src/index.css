@@ -1598,3 +1598,11 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 
   .phaseBadge { display:none; }
 }
+/* 리스트 전체 폭 제한 (✅ 풀폭으로 변경) */
+.dashList {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;          /* 가운데 정렬 해제 */
+  display: grid;
+  gap: 10px;
+}
