@@ -242,6 +242,7 @@ export default function Tasks() {
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
             origin: src.origin ?? "custom",
+            templateId: undefined,   // ✅ 전기수 복사는 템플릿 아님
           });
 
           exists.set(key, next.length - 1);
