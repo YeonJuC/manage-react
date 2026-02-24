@@ -69,12 +69,13 @@ export default function Tasks() {
     during: false,
     post: false,
   });
+
   const [editing, setEditing] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editPhase, setEditPhase] = useState<Task["phase"]>("during");
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [q, setQ] = useState("");
 
@@ -202,7 +203,6 @@ export default function Tasks() {
     const cohortOrder = cohorts.map((c) => c.key);
     const idx = cohortOrder.indexOf(cohort as CohortKey);
     const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
-
     const prevDates = prevCohort ? cohortDates[prevCohort] : null;
 
     let added = 0,
@@ -241,7 +241,7 @@ export default function Tasks() {
             dueDate: shiftedDue,
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
-            origin: src.origin ?? "custom", // ✅ 수동추가(custom)도 그대로 포함
+            origin: src.origin ?? "custom",
             templateId: (src as any).templateId,
           });
 
@@ -249,7 +249,7 @@ export default function Tasks() {
           added++;
         }
       } else {
-        // ✅ 첫 기수(32기) 등 "복사할 전기수 데이터가 없을 때"만 seed + templates로 채움
+        // ✅ seed + templates
         const baseKey = cohorts.find((c) => c.label.includes("32기"))?.key as CohortKey | undefined;
         const base = baseKey ? cohortDates[baseKey] : null;
         const delta = base ? diffDays(parseYmd(target.start), parseYmd(base.start)) : 0;
@@ -345,6 +345,18 @@ export default function Tasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, cohort, hydrated]);
 
+  // ✅ 공통: 메뉴 닫기 (바깥 클릭)
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest?.(".moreWrap")) return;
+      setMenuOpenId(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
   const PhaseSection = ({ phase }: { phase: Phase }) => {
     const title = phaseLabel[phase];
     const items = phaseBuckets[phase];
@@ -358,164 +370,119 @@ export default function Tasks() {
         ? "dashPill dashPill--during"
         : "dashPill dashPill--post";
 
-    // ✅ 행 렌더(레이아웃 개선: 내용 왼쪽 / 버튼 오른쪽)
     const renderRow = (t: Task) => (
-      <div
-        key={t.id}
-        className="dashItem"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        {/* ✅ LEFT: 체크 + 내용 */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 12,
-            flex: 1,
-            minWidth: 0, // 중요: 글 길어도 버튼 밀리지 않게
-          }}
-        >
+      <div key={t.id} className="dashItem">
+        {/* ✅ LEFT: 내용 (CSS가 기대하는 구조: dashItem > label) */}
+        <label style={{ flex: 1, minWidth: 0 }}>
           <input
             type="checkbox"
             checked={!!t.done}
             onChange={() => onToggle(t.id)}
-            style={{
-              width: 18,
-              height: 18,
-              marginTop: 3,
-              accentColor: "#2563eb",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            style={{ width: 18, height: 18, accentColor: "#2563eb", cursor: "pointer" }}
             aria-label="완료 토글"
           />
 
           <div style={{ minWidth: 0 }}>
-            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`} style={{ wordBreak: "keep-all" }}>
+            <div className={`dashItemTitle ${t.done ? "is-done" : ""}`}>
               {t.title}
             </div>
-            <div className="dashItemDate" style={{ marginTop: 4 }}>
+            <div className="dashItemDate">
               {t.dueDate} · 담당 {t.assignee?.trim() ? t.assignee : "-"}
             </div>
           </div>
-        </div>
+        </label>
 
-        {/* ✅ RIGHT: 버튼 */}
-        <div
-          className="actions"
-          style={{
-            display: "flex",
-            gap: 8,
-            flexShrink: 0,
-            alignItems: "center",
-            justifyContent: "flex-end",
-            flexWrap: "wrap", // 모바일에서 자연스럽게 줄바꿈
-          }}
-        >
-          <button
-            type="button"
-            className="btn-more"
-            title="담당자"
-            onClick={() => onSetAssignee(t.id)}
-            style={{ whiteSpace: "nowrap" }}
-          >
-            담당
-          </button>
+        {/* ✅ RIGHT: 버튼(항상 오른쪽) */}
+        <div className="actions">
+          {/* 담당 버튼을 pill로 통일 (동그라미 X) */}
           <button
             type="button"
             className="btn-edit"
-            onClick={() => onEditOpen(t)}
-            style={{ whiteSpace: "nowrap" }}
+            onClick={() => onSetAssignee(t.id)}
+            title="담당자"
           >
+            담당
+          </button>
+
+          <button type="button" className="btn-edit" onClick={() => onEditOpen(t)}>
             수정
           </button>
-          <button
-            type="button"
-            className="btn-del"
-            onClick={() => onDelete(t.id)}
-            style={{ whiteSpace: "nowrap" }}
-          >
+
+          <button type="button" className="btn-del" onClick={() => onDelete(t.id)}>
             삭제
           </button>
 
+          {/* 템플릿 옵션은 moreWrap / moreMenu CSS 사용 */}
           {t.templateId && (
-            <button
-              type="button"
-              className="btn-more"
-              onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
-              aria-expanded={menuOpenId === t.id}
-              title="템플릿 옵션"
-              style={{ whiteSpace: "nowrap" }}
-            >
-              ⋯
-            </button>
+            <div className="moreWrap">
+              <button
+                type="button"
+                className="btn-more"
+                onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
+                aria-expanded={menuOpenId === t.id}
+                title="템플릿 옵션"
+              >
+                ⋯
+              </button>
+
+              {menuOpenId === t.id && (
+                <div className="moreMenu">
+                  <button
+                    type="button"
+                    className="moreItem"
+                    onClick={() => {
+                      const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
+                      if (!ok) return;
+                      applyTemplateToAllCohorts({
+                        templateId: t.templateId!,
+                        title: t.title,
+                        assignee: t.assignee ?? "",
+                        offsetDays: 0,
+                      });
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <span className="moreIcon">📌</span>
+                    <span className="moreLabel">템플릿 전체 적용</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="moreItem"
+                    onClick={() => {
+                      const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
+                      if (!ok) return;
+                      const nt = window.prompt("새 제목(공백이면 유지)", t.title) ?? "";
+                      const nd = window.prompt("새 기한(YYYY-MM-DD, 공백이면 유지)", t.dueDate) ?? "";
+                      bulkUpdateByTemplateId(t.templateId!, {
+                        title: nt.trim() ? nt.trim() : undefined,
+                        dueDate: nd.trim() ? nd.trim() : undefined,
+                      });
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <span className="moreIcon">✏️</span>
+                    <span className="moreLabel">템플릿 일괄 수정</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="moreItem moreItem--danger"
+                    onClick={() => {
+                      const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
+                      if (!ok) return;
+                      bulkDeleteByTemplateId(t.templateId!);
+                      setMenuOpenId(null);
+                    }}
+                  >
+                    <span className="moreIcon">🗑️</span>
+                    <span className="moreLabel">템플릿 일괄 삭제</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
-
-        {t.templateId && menuOpenId === t.id && (
-          <div
-            style={{
-              width: "100%",
-              marginTop: 10,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              justifyContent: "flex-end", // 옵션도 오른쪽 정렬
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => {
-                const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
-                if (!ok) return;
-                applyTemplateToAllCohorts({
-                  templateId: t.templateId!,
-                  title: t.title,
-                  assignee: t.assignee ?? "",
-                  offsetDays: 0,
-                });
-                setMenuOpenId(null);
-              }}
-            >
-              템플릿 전체 적용
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => {
-                const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
-                if (!ok) return;
-                const nt = window.prompt("새 제목(공백이면 유지)", t.title) ?? "";
-                const nd = window.prompt("새 기한(YYYY-MM-DD, 공백이면 유지)", t.dueDate) ?? "";
-                bulkUpdateByTemplateId(t.templateId!, {
-                  title: nt.trim() ? nt.trim() : undefined,
-                  dueDate: nd.trim() ? nd.trim() : undefined,
-                });
-                setMenuOpenId(null);
-              }}
-            >
-              템플릿 일괄 수정
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => {
-                const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
-                if (!ok) return;
-                bulkDeleteByTemplateId(t.templateId!);
-                setMenuOpenId(null);
-              }}
-            >
-              템플릿 일괄 삭제
-            </button>
-          </div>
-        )}
       </div>
     );
 
