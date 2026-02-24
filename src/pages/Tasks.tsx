@@ -63,37 +63,65 @@ export default function Tasks() {
     bulkDeleteByTemplateId,
   } = useTasksStore();
 
+  const [q, setQ] = useState("");
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // 메뉴/편집 모달
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
-  const [editPhase, setEditPhase] = useState<Task["phase"]>("during");
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [editPhase, setEditPhase] = useState<Phase>("during");
 
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const [q, setQ] = useState("");
+  // ✅ 완료 접힘 상태(기본 접힘)
+  const [collapsedDone, setCollapsedDone] = useState<{
+    pre: boolean;
+    during: boolean;
+    post: boolean;
+  }>({
+    pre: true,
+    during: true,
+    post: true,
+  });
 
-  // ✅ (UI 복원) 필터 드롭다운 없이, 검색만 유지하고 phase별로 섹션 분리
+  const sortByDateAsc = (a: Task, b: Task) => a.dueDate.localeCompare(b.dueDate);
+
+  // ✅ 검색+현재 차수만
   const visible = useMemo(() => {
     let arr = tasks.filter((t) => t.cohort === cohort);
-
     const query = q.trim();
     if (query) {
       const lower = query.toLowerCase();
       arr = arr.filter(
         (t) =>
-          t.title.toLowerCase().includes(lower) ||
+          (t.title ?? "").toLowerCase().includes(lower) ||
           (t.assignee ?? "").toLowerCase().includes(lower)
       );
     }
     return arr;
   }, [tasks, cohort, q]);
 
+  // ✅ phase별로 분리
   const byPhase = useMemo(() => {
     const pre = visible.filter((t) => t.phase === "pre");
     const during = visible.filter((t) => t.phase === "during");
     const post = visible.filter((t) => t.phase === "post");
     return { pre, during, post };
   }, [visible]);
+
+  // ✅ 각 phase에서 (미완료/완료) 분리 + 날짜정렬
+  const phaseBuckets = useMemo(() => {
+    const split = (items: Task[]) => {
+      const undone = items.filter((t) => !t.done).sort(sortByDateAsc);
+      const done = items.filter((t) => t.done).sort(sortByDateAsc);
+      return { undone, done };
+    };
+    return {
+      pre: split(byPhase.pre),
+      during: split(byPhase.during),
+      post: split(byPhase.post),
+    };
+  }, [byPhase]);
 
   const total = visible.length;
   const doneCount = visible.filter((t) => t.done).length;
@@ -102,6 +130,7 @@ export default function Tasks() {
     if (!cohort) return;
     const title = window.prompt("업무명을 입력하세요");
     if (!title || !title.trim()) return;
+
     const dueDate = window.prompt("기한(YYYY-MM-DD) 입력", "");
     if (!dueDate || !dueDate.trim()) return;
 
@@ -164,12 +193,9 @@ export default function Tasks() {
   };
 
   /**
-   * ✅ 업무 일괄 등록 (핵심)
-   * - 32기(첫 기수)는 seedTasks32 + templates로 채움
-   * - 그 외 기수는 "바로 전 기수의 실제 tasks(수동 추가 포함)"를 통째로 복사
-   * - 날짜는 (현재기수.start - 전기수.start) 만큼 shift
-   * - phase는 현재기수 기간 기준으로 재계산
-   * - 중복(제목+기한) 방지
+   * ✅ 업무 일괄 등록
+   * - 전기수 존재 + 전기수 task 있으면: 전기수 tasks(수동 포함) 통째로 복사 + 날짜 shift + phase 재계산
+   * - 아니면(첫 기수 등): seedTasks32 + templates로 채움
    */
   const onBulkSeed = () => {
     if (!cohort) return;
@@ -180,7 +206,6 @@ export default function Tasks() {
     const cohortOrder = cohorts.map((c) => c.key);
     const idx = cohortOrder.indexOf(cohort as CohortKey);
     const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
-
     const prevDates = prevCohort ? cohortDates[prevCohort] : null;
 
     let added = 0,
@@ -190,10 +215,10 @@ export default function Tasks() {
     setTasksAndSave((prev) => {
       let next = prev;
 
+      // ✅ 중복키(현재 기수 기준): cohort|due|title
       const exists = new Map<string, number>();
       next.forEach((t, i) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, i));
 
-      // ✅ 전기수 복사 가능 여부
       const prevTasks = prevCohort ? prev.filter((t) => t.cohort === prevCohort) : [];
       const canCopyPrev = !!prevCohort && prevTasks.length > 0 && !!prevDates;
 
@@ -219,7 +244,7 @@ export default function Tasks() {
             dueDate: shiftedDue,
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
-            origin: src.origin ?? "custom", // ✅ 수동추가(custom)도 그대로 포함
+            origin: src.origin ?? "custom",
             templateId: (src as any).templateId,
           });
 
@@ -227,8 +252,10 @@ export default function Tasks() {
           added++;
         }
       } else {
-        // ✅ 첫 기수(32기) 등 "복사할 전기수 데이터가 없을 때"만 seed + templates로 채움
-        const baseKey = cohorts.find((c) => c.label.includes("32기"))?.key as CohortKey | undefined;
+        // seed + templates
+        const baseKey = cohorts.find((c) => (c.label || "").includes("32기"))?.key as
+          | CohortKey
+          | undefined;
         const base = baseKey ? cohortDates[baseKey] : null;
         const delta = base ? diffDays(parseYmd(target.start), parseYmd(base.start)) : 0;
 
@@ -263,13 +290,14 @@ export default function Tasks() {
             assignee: item.assignee ?? "",
             origin: "seed",
           });
+
           exists.set(key, next.length - 1);
           added++;
         }
 
         // 2) templates
         const tplItems = materializeTemplatesForCohort(cohort as CohortKey);
-        for (const t of tplItems) {
+        for (const t of tplItems as any[]) {
           const title = (t.title ?? "").trim();
           if (!title || !t.dueDate) continue;
 
@@ -286,9 +314,10 @@ export default function Tasks() {
             dueDate: t.dueDate,
             phase: fixedPhase,
             assignee: t.assignee ?? "",
-            templateId: (t as any).templateId,
+            templateId: t.templateId,
             origin: "custom",
           });
+
           exists.set(key, next.length - 1);
           added++;
         }
@@ -296,7 +325,7 @@ export default function Tasks() {
 
       queueMicrotask(() => {
         const baseMsg = canCopyPrev
-          ? `전기수(${prevCohort}) 업무를 복사해 적용했습니다.`
+          ? `전기수(${prevCohort}) 업무(수동 포함)를 복사해 적용했습니다.`
           : "기본 업무/템플릿으로 채웠습니다.";
         alert(
           `${baseMsg}\n\n일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`
@@ -307,365 +336,269 @@ export default function Tasks() {
     });
   };
 
-  // ✅ 차수 선택 후, 해당 차수에 할 일이 비어있으면 1회 자동 일괄등록
+  // ✅ 차수 이동했는데 해당 차수 task가 비어있으면 1회 자동 일괄등록(원치 않으면 이 useEffect 지우면 됨)
   useEffect(() => {
     if (!uid || !cohort) return;
     if (!hydrated) return;
 
-    const alreadyKey = `seeded_${uid}_${cohort}`;
-    if (localStorage.getItem(alreadyKey) === "1") return;
+    const key = `seeded_${uid}_${cohort}`;
+    if (localStorage.getItem(key) === "1") return;
 
     const hasAny = tasks.some((t) => t.cohort === cohort);
     if (hasAny) return;
 
-    localStorage.setItem(alreadyKey, "1");
+    localStorage.setItem(key, "1");
     onBulkSeed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, cohort, hydrated]);
 
-  const Section = ({ title, items }: { title: string; items: Task[] }) => (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-        <div style={{ opacity: 0.7, fontSize: 13 }}>{items.length}개</div>
+  const TaskCard = ({ t }: { t: Task }) => (
+    <div className={`task-card ${t.done ? "is-done" : ""}`}>
+      <button
+        type="button"
+        className={`check ${t.done ? "checked" : ""}`}
+        onClick={() => onToggle(t.id)}
+        title="완료 토글"
+      >
+        {t.done ? "✓" : ""}
+      </button>
+
+      <div className="task-main">
+        <div className="task-title">{t.title}</div>
+        <div className="task-meta">
+          <span>기한 {t.dueDate}</span>
+          <span>담당 {t.assignee || "-"}</span>
+        </div>
       </div>
 
-      <div style={{ display: "grid", gap: 10 }}>
-        {items.map((t) => (
-          <div
-            key={t.id}
-            style={{
-              border: "1px solid #e6e6e6",
-              borderRadius: 14,
-              padding: 12,
-              background: "#fff",
+      <button
+        type="button"
+        className="more"
+        onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
+      >
+        ⋯
+      </button>
+
+      {menuOpenId === t.id && (
+        <div className="menu">
+          <button
+            onClick={() => {
+              onEditOpen(t);
+              setMenuOpenId(null);
             }}
           >
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={() => onToggle(t.id)}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 999,
-                  border: "1px solid #ddd",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                }}
-                title="완료 토글"
-              >
-                {t.done ? "✓" : ""}
-              </button>
+            수정
+          </button>
+          <button
+            onClick={() => {
+              onSetAssignee(t.id);
+              setMenuOpenId(null);
+            }}
+          >
+            담당자
+          </button>
+          <button
+            onClick={() => {
+              onDelete(t.id);
+              setMenuOpenId(null);
+            }}
+          >
+            삭제
+          </button>
 
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, textDecoration: t.done ? "line-through" : "none" }}>
-                  {t.title}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    opacity: 0.8,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span>기한: {t.dueDate}</span>
-                  <span>구간: {phaseLabel[t.phase]}</span>
-                  <span>담당: {t.assignee || "-"}</span>
-                </div>
-              </div>
-
+          {t.templateId && (
+            <>
               <button
-                type="button"
-                onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid #ddd",
-                  fontWeight: 800,
-                  cursor: "pointer",
+                onClick={() => {
+                  const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
+                  if (!ok) return;
+                  // ✅ TS2345 방지: 객체로 전달
+                  applyTemplateToAllCohorts({
+                    templateId: t.templateId!,
+                    title: t.title,
+                    assignee: t.assignee ?? "",
+                    offsetDays: 0,
+                  });
+                  setMenuOpenId(null);
                 }}
               >
-                ⋯
+                템플릿 전체 적용
               </button>
-            </div>
 
-            {menuOpenId === t.id && (
-              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onEditOpen(t);
-                    setMenuOpenId(null);
-                  }}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid #ddd",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  수정
-                </button>
+              <button
+                onClick={() => {
+                  const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
+                  if (!ok) return;
+                  const nt = window.prompt("새 제목(공백이면 유지)", t.title) ?? "";
+                  const nd = window.prompt("새 기한(YYYY-MM-DD, 공백이면 유지)", t.dueDate) ?? "";
+                  bulkUpdateByTemplateId(t.templateId!, {
+                    title: nt.trim() ? nt.trim() : undefined,
+                    dueDate: nd.trim() ? nd.trim() : undefined,
+                  });
+                  setMenuOpenId(null);
+                }}
+              >
+                템플릿 일괄 수정
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSetAssignee(t.id);
-                    setMenuOpenId(null);
-                  }}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid #ddd",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  담당자
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete(t.id);
-                    setMenuOpenId(null);
-                  }}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid #ddd",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  삭제
-                </button>
-
-                {t.templateId && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
-                        if (!ok) return;
-
-                        // ✅ TS2345 해결: string이 아니라 객체로 전달
-                        applyTemplateToAllCohorts({
-                          templateId: t.templateId!,
-                          title: t.title,
-                          assignee: t.assignee ?? "",
-                          offsetDays: 0,
-                        });
-
-                        setMenuOpenId(null);
-                      }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid #ddd",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      템플릿 전체 적용
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
-                        if (!ok) return;
-                        const nt = window.prompt("새 제목(공백이면 유지)", t.title) ?? "";
-                        const nd = window.prompt("새 기한(YYYY-MM-DD, 공백이면 유지)", t.dueDate) ?? "";
-                        bulkUpdateByTemplateId(t.templateId!, {
-                          title: nt.trim() ? nt.trim() : undefined,
-                          dueDate: nd.trim() ? nd.trim() : undefined,
-                        });
-                        setMenuOpenId(null);
-                      }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid #ddd",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      템플릿 일괄 수정
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
-                        if (!ok) return;
-                        bulkDeleteByTemplateId(t.templateId!);
-                        setMenuOpenId(null);
-                      }}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid #ddd",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      템플릿 일괄 삭제
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              <button
+                onClick={() => {
+                  const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
+                  if (!ok) return;
+                  bulkDeleteByTemplateId(t.templateId!);
+                  setMenuOpenId(null);
+                }}
+              >
+                템플릿 일괄 삭제
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
+
+  const Section = ({
+    phase,
+    title,
+    items,
+  }: {
+    phase: Phase;
+    title: string;
+    items: { undone: Task[]; done: Task[] };
+  }) => {
+    const isCollapsed = collapsedDone[phase];
+
+    return (
+      <section className="tasks-section">
+        <div className="tasks-section-header">
+          <div className="tasks-section-title">
+            <span className="badge">{title}</span>
+            <span className="count">
+              미완료 {items.undone.length} · 완료 {items.done.length}
+            </span>
+          </div>
+        </div>
+
+        {/* ✅ 미완료는 항상 펼침 + 날짜순 */}
+        <div className="tasks-list">
+          {items.undone.map((t) => (
+            <TaskCard key={t.id} t={t} />
+          ))}
+          {items.undone.length === 0 && <div className="empty">미완료 할 일이 없습니다.</div>}
+        </div>
+
+        {/* ✅ 완료는 접힘 */}
+        <div className="done-wrap">
+          <button
+            type="button"
+            className="done-toggle"
+            onClick={() => setCollapsedDone((prev) => ({ ...prev, [phase]: !prev[phase] }))}
+          >
+            {isCollapsed ? "▶" : "▼"} 완료한 할 일 ({items.done.length})
+          </button>
+
+          {!isCollapsed && (
+            <div className="tasks-list done">
+              {items.done.map((t) => (
+                <TaskCard key={t.id} t={t} />
+              ))}
+              {items.done.length === 0 && <div className="empty">완료한 할 일이 없습니다.</div>}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
 
   if (!ready) return <div style={{ padding: 16 }}>로딩중...</div>;
 
   return (
-    <div className="page-wrap" style={{ padding: 16 }}>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>할일</h2>
+    <div className="page-wrap">
+      {/* ✅ 상단 헤더 */}
+      <div className="tasks-top">
+        <div className="tasks-top-left">
+          <div className="title">할일</div>
 
-        <select
-          value={cohort ?? ""}
-          onChange={(e) => setCohort(e.target.value as any)}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd" }}
-        >
-          <option value="" disabled>
-            차수 선택
-          </option>
-          {cohorts.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
+          <select
+            value={cohort ?? ""}
+            onChange={(e) => setCohort(e.target.value as any)}
+            className="select"
+          >
+            <option value="" disabled>
+              차수 선택
             </option>
-          ))}
-        </select>
+            {cohorts.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
 
-        <button
-          type="button"
-          onClick={onAdd}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          + 추가
-        </button>
+          <button className="btn" onClick={onAdd}>
+            + 추가
+          </button>
 
-        <button
-          type="button"
-          onClick={onBulkSeed}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          업무 일괄 등록
-        </button>
+          <button className="btn" onClick={onBulkSeed}>
+            업무 일괄 등록
+          </button>
+        </div>
 
-        <div style={{ flex: 1 }} />
-
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="검색(업무/담당자)"
-          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
-        />
+        <div className="tasks-top-right">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="검색(업무/담당자)"
+            className="search"
+          />
+        </div>
       </div>
 
-      <div style={{ marginTop: 10, opacity: 0.8 }}>
+      <div className="summary">
         총 {total}개 / 완료 {doneCount}개
       </div>
 
-      <div ref={listRef} style={{ marginTop: 14 }}>
-        <Section title="사전" items={byPhase.pre} />
-        <Section title="교육 중" items={byPhase.during} />
-        <Section title="사후" items={byPhase.post} />
+      {/* ✅ 섹션 */}
+      <div ref={listRef} className="sections">
+        <Section phase="pre" title="사전" items={phaseBuckets.pre} />
+        <Section phase="during" title="교육 중" items={phaseBuckets.during} />
+        <Section phase="post" title="사후" items={phaseBuckets.post} />
       </div>
 
+      {/* ✅ 수정 모달 */}
       {editing && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            display: "grid",
-            placeItems: "center",
-            padding: 16,
-          }}
-          onClick={() => setEditing(null)}
-        >
-          <div
-            style={{
-              width: "min(520px, 100%)",
-              background: "#fff",
-              borderRadius: 16,
-              padding: 14,
-              border: "1px solid #eee",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0 }}>업무 수정</h3>
+        <div className="modal-backdrop" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">업무 수정</div>
 
-            <div style={{ display: "grid", gap: 10 }}>
+            <div className="modal-body">
               <input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
                 placeholder="업무명"
-                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+                className="input"
               />
               <input
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
                 placeholder="기한 YYYY-MM-DD"
-                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+                className="input"
               />
               <select
                 value={editPhase}
                 onChange={(e) => setEditPhase(e.target.value as any)}
-                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+                className="select"
               >
                 <option value="pre">사전</option>
                 <option value="during">교육 중</option>
                 <option value="post">사후</option>
               </select>
 
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid #ddd",
-                    fontWeight: 800,
-                  }}
-                >
+              <div className="modal-actions">
+                <button className="btn ghost" onClick={() => setEditing(null)}>
                   취소
                 </button>
-                <button
-                  type="button"
-                  onClick={onEditSave}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid #ddd",
-                    fontWeight: 800,
-                  }}
-                >
+                <button className="btn" onClick={onEditSave}>
                   저장
                 </button>
               </div>
@@ -673,6 +606,262 @@ export default function Tasks() {
           </div>
         </div>
       )}
+
+      {/* ✅ 페이지 전용 스타일 (이 파일에 포함) */}
+      <style>{`
+        .page-wrap{
+          min-height:100vh;
+          padding:16px;
+          background: #f6f7fb;
+        }
+
+        .tasks-top{
+          display:flex;
+          gap:12px;
+          flex-wrap:wrap;
+          align-items:center;
+          justify-content:space-between;
+        }
+        .tasks-top-left{
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
+          align-items:center;
+        }
+        .tasks-top-right{
+          display:flex;
+          align-items:center;
+          gap:10px;
+        }
+        .title{
+          font-weight:900;
+          font-size:20px;
+          letter-spacing:-0.3px;
+        }
+
+        .select{
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(0,0,0,0.12);
+          background:#fff;
+          font-weight:800;
+          outline:none;
+        }
+
+        .btn{
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(0,0,0,0.12);
+          background:#fff;
+          font-weight:900;
+          cursor:pointer;
+        }
+        .btn.ghost{
+          background: rgba(0,0,0,0.03);
+        }
+
+        .search{
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(0,0,0,0.12);
+          background:#fff;
+          min-width:220px;
+          outline:none;
+          font-weight:700;
+        }
+
+        .summary{
+          margin-top:10px;
+          opacity:0.8;
+          font-weight:700;
+        }
+
+        .sections{
+          margin-top:14px;
+          display:grid;
+          gap:14px;
+        }
+
+        .tasks-section{
+          background: rgba(255,255,255,0.78);
+          border: 1px solid rgba(0,0,0,0.07);
+          border-radius:18px;
+          padding:14px;
+          box-shadow: 0 8px 26px rgba(0,0,0,0.05);
+          backdrop-filter: blur(10px);
+        }
+
+        .tasks-section-header{
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:10px;
+        }
+        .tasks-section-title{
+          display:flex;
+          gap:10px;
+          align-items:center;
+        }
+
+        .badge{
+          font-weight:900;
+          padding:6px 10px;
+          border-radius:999px;
+          background: linear-gradient(135deg, rgba(5,80,125,0.14), rgba(5,80,125,0.05));
+          border: 1px solid rgba(5,80,125,0.18);
+        }
+        .count{
+          opacity:0.7;
+          font-size:13px;
+          font-weight:800;
+        }
+
+        .tasks-list{
+          display:grid;
+          gap:10px;
+        }
+
+        .task-card{
+          position:relative;
+          display:flex;
+          gap:10px;
+          align-items:center;
+          padding:12px;
+          border-radius:16px;
+          background:#fff;
+          border:1px solid rgba(0,0,0,0.07);
+        }
+        .task-card.is-done{
+          opacity:0.75;
+        }
+
+        .check{
+          width:34px;
+          height:34px;
+          border-radius:999px;
+          border:1px solid rgba(0,0,0,0.15);
+          background:#fff;
+          font-weight:900;
+          cursor:pointer;
+        }
+        .check.checked{
+          background: rgba(34,197,94,0.14);
+          border-color: rgba(34,197,94,0.35);
+        }
+
+        .task-main{ flex:1; min-width:0; }
+        .task-title{
+          font-weight:900;
+          letter-spacing:-0.2px;
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        }
+        .task-meta{
+          margin-top:4px;
+          font-size:13px;
+          opacity:0.75;
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
+          font-weight:700;
+        }
+
+        .more{
+          border:1px solid rgba(0,0,0,0.12);
+          background:#fff;
+          border-radius:12px;
+          padding:8px 10px;
+          font-weight:900;
+          cursor:pointer;
+        }
+
+        .menu{
+          width:100%;
+          margin-top:10px;
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
+        }
+        .menu button{
+          border:1px solid rgba(0,0,0,0.12);
+          background:#fff;
+          border-radius:12px;
+          padding:8px 10px;
+          font-weight:900;
+          cursor:pointer;
+        }
+
+        .done-wrap{ margin-top:10px; }
+        .done-toggle{
+          width:100%;
+          text-align:left;
+          padding:10px 12px;
+          border-radius:14px;
+          border:1px dashed rgba(0,0,0,0.18);
+          background: rgba(0,0,0,0.03);
+          font-weight:900;
+          cursor:pointer;
+        }
+
+        .tasks-list.done .task-card{
+          background: rgba(255,255,255,0.85);
+        }
+
+        .empty{
+          padding:12px;
+          border-radius:14px;
+          background: rgba(0,0,0,0.03);
+          border: 1px dashed rgba(0,0,0,0.12);
+          opacity:0.75;
+          font-weight:800;
+        }
+
+        .modal-backdrop{
+          position:fixed;
+          inset:0;
+          background: rgba(0,0,0,0.35);
+          display:grid;
+          place-items:center;
+          padding:16px;
+          z-index:50;
+        }
+        .modal{
+          width:min(520px,100%);
+          background:#fff;
+          border-radius:18px;
+          border:1px solid rgba(0,0,0,0.10);
+          box-shadow: 0 18px 60px rgba(0,0,0,0.18);
+          padding:14px;
+        }
+        .modal-title{
+          font-weight:900;
+          font-size:16px;
+          margin-bottom:10px;
+        }
+        .modal-body{
+          display:grid;
+          gap:10px;
+        }
+        .input{
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(0,0,0,0.12);
+          outline:none;
+          font-weight:800;
+        }
+        .modal-actions{
+          display:flex;
+          justify-content:flex-end;
+          gap:10px;
+          margin-top:6px;
+        }
+
+        @media (max-width: 420px){
+          .search{ min-width: 160px; width: 100%; }
+          .tasks-top-right{ width: 100%; }
+        }
+      `}</style>
     </div>
   );
 }
