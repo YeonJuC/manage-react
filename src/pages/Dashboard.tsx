@@ -1,0 +1,310 @@
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { cohorts, type CohortKey } from "../data/templates";
+import { useTasksStore } from "../store/TasksContext";
+import type { Task } from "../store/tasks";
+import { useState } from "react";
+import { addTask } from "../store/tasks";
+
+function labelPhase(p: Task["phase"]) {
+  if (p === "pre") return "사전";
+  if (p === "during") return "교육중";
+  return "사후";
+}
+
+function sortByDate(a: Task, b: Task) {
+  if (a.dueDate < b.dueDate) return -1;
+  if (a.dueDate > b.dueDate) return 1;
+  return a.title.localeCompare(b.title);
+}
+
+function PdfModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+
+  const pdfSrc = `${import.meta.env.BASE_URL}docs/250115_ops.pdf`;
+
+  return (
+    <div className="pdf-overlay" onClick={onClose}>
+      <div className="pdf-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="pdf-header">
+          <span>과정운영 업무정리 PDF</span>
+          <button className="pdf-close" onClick={onClose}>
+            닫기
+          </button>
+        </div>
+
+        <iframe
+          title="ops-pdf"
+          src={pdfSrc}
+          className="pdf-iframe"
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave, viewMode, setViewMode, commonOwnerUid, setCommonOwnerUid } = useTasksStore();
+  const nav = useNavigate();
+
+  const cohortTasks = useMemo(() => {
+    if (!cohort) return [];
+    return tasks.filter((t) => t.cohort === cohort);
+  }, [tasks, cohort]);
+
+  const total = cohortTasks.length;
+  const done = cohortTasks.reduce((acc, t) => acc + (t.done ? 1 : 0), 0);
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  const todayYmd = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const todayTasks = useMemo(() => {
+    return cohortTasks
+      .filter((t) => !t.done && t.dueDate === todayYmd)
+      .sort(sortByDate)
+      .slice(0, 10);
+  }, [cohortTasks, todayYmd]);
+
+  const overdueTasks = useMemo(() => {
+    return cohortTasks
+      .filter((t) => !t.done && t.dueDate < todayYmd)
+      .sort(sortByDate)
+      .slice(0, 10);
+  }, [cohortTasks, todayYmd]);
+
+  const upcomingTasks = useMemo(() => {
+    return cohortTasks
+      .filter((t) => !t.done && t.dueDate > todayYmd)
+      .sort(sortByDate)
+      .slice(0, 10);
+  }, [cohortTasks, todayYmd]);
+
+  const goDate = (t: Task) => nav(`/calendar?date=${t.dueDate}`);
+
+  const [open, setOpen] = useState(false);
+
+  const [newTitle, setNewTitle] = useState("");
+  const [newDueDate, setNewDueDate] = useState(todayYmd);
+  const [newPhase, setNewPhase] = useState<Task["phase"]>("during");
+
+  const onAddFromDash = () => {
+    if (!uid) return;
+    if (!cohort) return;
+    if (!newTitle.trim()) return;
+
+    setTasksAndSave((prev) =>
+      addTask(prev, {
+        cohort,
+        title: newTitle.trim(),
+        dueDate: newDueDate,
+        phase: newPhase,
+        assignee: "",
+      })
+    );
+
+    setNewTitle("");
+  };
+
+  if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
+  if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
+  if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
+
+  return (
+    <div className="dashPage">
+      <div className="dashTop">
+        <div>
+          <h1 className="dashH1">대시보드</h1>
+          <div className="dashHint">
+            {cohort ? (
+              <>선택 차수 <b>{cohort}</b> · 완료 <b>{done}</b> / <b>{total}</b> ({pct}%)</>
+            ) : (
+              <>차수를 선택하면 일정 요약이 표시됩니다.</>
+            )}
+            <span style={{ marginLeft: 10, fontWeight: 700 }}>
+              {viewMode === "common" ? " · 🔵 공용 페이지" : " · 🟢 내 페이지"}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            type="button"
+            className="pdf-btn"
+            onClick={() => {
+              // ✅ 공용 UID가 비어있으면 1회 입력받아 localStorage에 저장
+              if (viewMode === "mine") {
+                if (!commonOwnerUid) {
+                  const next = window.prompt("공용 할일 소유자 UID를 입력하세요(상대방 uid)");
+                  if (!next || !next.trim()) return;
+                  setCommonOwnerUid(next.trim());
+                }
+                setViewMode("common");
+                return;
+              }
+              setViewMode("mine");
+            }}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {viewMode === "mine" ? "공용 할일 보러가기" : "내 할일로 돌아가기"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="btn btn--ghost"
+            style={{ whiteSpace: "nowrap" }}
+          >
+            업무정리 PDF
+          </button>
+        </div>
+
+        <PdfModal open={open} onClose={() => setOpen(false)} />
+      </div>
+
+      {/* 차수 선택 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="dashRow">
+          <strong>차수 선택</strong>
+
+          <select
+            value={cohort}
+            onChange={(e) => setCohort(e.target.value as CohortKey)}
+            className="dashSelect"
+          >
+            <option value="">선택하세요</option>
+            {cohorts.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
+          {cohort ? (
+            <span className="dashMuted">
+              완료 {done} / {total} ({pct}%)
+            </span>
+          ) : (
+            <span className="dashMuted">차수를 선택해주세요.</span>
+          )}
+        </div>
+
+        {cohort && (
+          <div style={{ marginTop: 12 }}>
+            <div className="progress">
+              <div className="progress__bar" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 숫자 요약 */}
+      <div className="dashStats">
+        <div className="card">
+          <div className="dashStatLabel">전체 할 일</div>
+          <div className="dashStatValue">{total}</div>
+        </div>
+        <div className="card">
+          <div className="dashStatLabel">완료</div>
+          <div className="dashStatValue">{done}</div>
+        </div>
+        <div className="card">
+          <div className="dashStatLabel">잔여</div>
+          <div className="dashStatValue">{Math.max(0, total - done)}</div>
+        </div>
+      </div>
+
+      {/* ✅ 3개 섹션을 한꺼번에(그리드) */}
+      <div className="dashTri">
+        <section className="card dashBox">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">오늘 할 일</h3>
+              <div className="dashBoxSub">{todayYmd}</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav(`/calendar?date=${todayYmd}`)}>
+              오늘 보기
+            </button>
+          </div>
+
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && todayTasks.length === 0 && <div className="dashEmpty">오늘 할 일이 없습니다.</div>}
+          {cohort && todayTasks.length > 0 && (
+            <div className="dashList">
+              {todayTasks.map((t) => (
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card dashBox">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">다가오는 할 일</h3>
+              <div className="dashBoxSub">미완료 기준</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav("/calendar")}>
+              캘린더
+            </button>
+          </div>
+
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && upcomingTasks.length === 0 && <div className="dashEmpty">다가오는 할 일이 없습니다.</div>}
+          {cohort && upcomingTasks.length > 0 && (
+            <div className="dashList">
+              {upcomingTasks.map((t) => (
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card dashBox dashBox--danger">
+          <div className="dashBoxHead">
+            <div>
+              <h3 className="dashBoxTitle">밀린 할 일</h3>
+              <div className="dashBoxSub">오늘 이전 · 미완료</div>
+            </div>
+            <button className="btn btn--ghost dashMiniBtn" onClick={() => nav("/tasks")}>
+              정리
+            </button>
+          </div>
+
+          {!cohort && <div className="dashEmpty">차수를 선택해주세요.</div>}
+          {cohort && overdueTasks.length === 0 && <div className="dashEmpty">밀린 할 일이 없습니다! GOOD!</div>}
+          {cohort && overdueTasks.length > 0 && (
+            <div className="dashList">
+              {overdueTasks.map((t) => (
+                <button key={t.id} className="upcomingItem" onClick={() => goDate(t)}>
+                  <span className={`upcomingPhase upcomingPhase--${t.phase}`}>{labelPhase(t.phase)}</span>
+                  <span className="upcomingTitle">{t.title}</span>
+                  <span className="upcomingDate">{t.dueDate}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
