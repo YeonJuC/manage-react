@@ -67,16 +67,15 @@ export default function Tasks() {
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editPhase, setEditPhase] = useState<Task["phase"]>("during");
-
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const [filter, setFilter] = useState<"all" | "pre" | "during" | "post">("all");
   const [q, setQ] = useState("");
 
-  const filtered = useMemo(() => {
+  // ✅ (UI 복원) 필터 드롭다운 없이, 검색만 유지하고 phase별로 섹션 분리
+  const visible = useMemo(() => {
     let arr = tasks.filter((t) => t.cohort === cohort);
-    if (filter !== "all") arr = arr.filter((t) => t.phase === filter);
+
     const query = q.trim();
     if (query) {
       const lower = query.toLowerCase();
@@ -87,10 +86,17 @@ export default function Tasks() {
       );
     }
     return arr;
-  }, [tasks, cohort, filter, q]);
+  }, [tasks, cohort, q]);
 
-  const total = filtered.length;
-  const doneCount = filtered.filter((t) => t.done).length;
+  const byPhase = useMemo(() => {
+    const pre = visible.filter((t) => t.phase === "pre");
+    const during = visible.filter((t) => t.phase === "during");
+    const post = visible.filter((t) => t.phase === "post");
+    return { pre, during, post };
+  }, [visible]);
+
+  const total = visible.length;
+  const doneCount = visible.filter((t) => t.done).length;
 
   const onAdd = () => {
     if (!cohort) return;
@@ -98,6 +104,7 @@ export default function Tasks() {
     if (!title || !title.trim()) return;
     const dueDate = window.prompt("기한(YYYY-MM-DD) 입력", "");
     if (!dueDate || !dueDate.trim()) return;
+
     const due = dueDate.trim();
     const target = cohortDates[cohort as CohortKey];
     const phase = target ? phaseOf(due, target.start, target.end) : "during";
@@ -156,18 +163,25 @@ export default function Tasks() {
     setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
   };
 
-  // ✅ 업무 일괄 등록(핵심 수정)
+  /**
+   * ✅ 업무 일괄 등록 (핵심)
+   * - 32기(첫 기수)는 seedTasks32 + templates로 채움
+   * - 그 외 기수는 "바로 전 기수의 실제 tasks(수동 추가 포함)"를 통째로 복사
+   * - 날짜는 (현재기수.start - 전기수.start) 만큼 shift
+   * - phase는 현재기수 기간 기준으로 재계산
+   * - 중복(제목+기한) 방지
+   */
   const onBulkSeed = () => {
     if (!cohort) return;
 
-    const baseKey = cohorts.find((c) => c.label === "32기(1차)")?.key;
-    if (!baseKey) return alert('cohorts에 "32기(1차)" 라벨이 없어요.');
-
-    const base = cohortDates[baseKey as CohortKey];
     const target = cohortDates[cohort as CohortKey];
     if (!target) return alert("선택한 차수에 대한 일정 정보가 없습니다.");
 
-    const delta = diffDays(parseYmd(target.start), parseYmd(base.start));
+    const cohortOrder = cohorts.map((c) => c.key);
+    const idx = cohortOrder.indexOf(cohort as CohortKey);
+    const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
+
+    const prevDates = prevCohort ? cohortDates[prevCohort] : null;
 
     let added = 0,
       skipped = 0,
@@ -177,26 +191,24 @@ export default function Tasks() {
       let next = prev;
 
       const exists = new Map<string, number>();
-      next.forEach((t, idx) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, idx));
+      next.forEach((t, i) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, i));
 
-      // 1) ✅ 32기(기준 차수)에 '실제로 존재하는 업무들'을 그대로 복사해서 적용
-      //    - 32기에서 수동으로 추가한 업무(일괄등록에 없던 내용)까지 포함
-      //    - 날짜는 목표 차수 start 기준으로 shift, phase는 목표 차수 기간 기준으로 재계산
-      const baseTasks = prev.filter((t) => t.cohort === baseKey);
+      // ✅ 전기수 복사 가능 여부
+      const prevTasks = prevCohort ? prev.filter((t) => t.cohort === prevCohort) : [];
+      const canCopyPrev = !!prevCohort && prevTasks.length > 0 && !!prevDates;
 
-      const shouldCopyFromBase = cohort !== baseKey && baseTasks.length > 0;
+      if (canCopyPrev) {
+        const delta = diffDays(parseYmd(target.start), parseYmd(prevDates!.start));
 
-      if (shouldCopyFromBase) {
-        for (const srcTask of baseTasks) {
-          const title = srcTask.title?.trim();
-          if (!title || !srcTask.dueDate) continue;
+        for (const src of prevTasks) {
+          const title = (src.title ?? "").trim();
+          if (!title || !src.dueDate) continue;
 
-          const shiftedDue = fmtYmd(addDays(parseYmd(srcTask.dueDate), delta));
+          const shiftedDue = fmtYmd(addDays(parseYmd(src.dueDate), delta));
           const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
 
           const key = `${cohort}|${shiftedDue}|${title}`;
-          const idx = exists.get(key);
-          if (idx !== undefined) {
+          if (exists.has(key)) {
             skipped++;
             continue;
           }
@@ -206,31 +218,37 @@ export default function Tasks() {
             title,
             dueDate: shiftedDue,
             phase: shiftedPhase,
-            assignee: srcTask.assignee ?? "",
-            origin: srcTask.origin ?? "custom",
-            templateId: (srcTask as any).templateId,
+            assignee: src.assignee ?? "",
+            origin: src.origin ?? "custom", // ✅ 수동추가(custom)도 그대로 포함
+            templateId: (src as any).templateId,
           });
+
           exists.set(key, next.length - 1);
           added++;
         }
       } else {
-        // ✅ 32기이거나(기준 차수) / 아직 32기 업무가 비어있을 때는 seed + 템플릿으로 채움(기존 방식)
+        // ✅ 첫 기수(32기) 등 "복사할 전기수 데이터가 없을 때"만 seed + templates로 채움
+        const baseKey = cohorts.find((c) => c.label.includes("32기"))?.key as CohortKey | undefined;
+        const base = baseKey ? cohortDates[baseKey] : null;
+        const delta = base ? diffDays(parseYmd(target.start), parseYmd(base.start)) : 0;
+
+        // 1) seed
         for (const item of seedTasks32) {
-          const title = item.title?.trim();
+          const title = (item.title ?? "").trim();
           if (!title || !item.dueDate) continue;
 
-          const shiftedDue = fmtYmd(addDays(parseYmd(item.dueDate), delta));
+          const shiftedDue = base ? fmtYmd(addDays(parseYmd(item.dueDate), delta)) : item.dueDate;
           const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
 
           const key = `${cohort}|${shiftedDue}|${title}`;
-          const idx = exists.get(key);
+          const idxExist = exists.get(key);
 
-          if (idx !== undefined) {
+          if (idxExist !== undefined) {
             skipped++;
-            const cur = next[idx];
+            const cur = next[idxExist];
             if ((!cur.assignee || cur.assignee === "") && item.assignee) {
               const copy = [...next];
-              copy[idx] = { ...cur, assignee: item.assignee };
+              copy[idxExist] = { ...cur, assignee: item.assignee };
               next = copy;
               updated++;
             }
@@ -248,20 +266,16 @@ export default function Tasks() {
           exists.set(key, next.length - 1);
           added++;
         }
-      }
 
-      // 2) ✅ 사용자가 32기에서 '템플릿으로 저장'해둔 커스텀 업무도 같이 적용
-      //    - 단, 다음 기수는 "32기의 실제 업무 전체를 복사"하므로 중복 방지 위해 base-copy 모드일 때는 생략
-      if (!shouldCopyFromBase) {
+        // 2) templates
         const tplItems = materializeTemplatesForCohort(cohort as CohortKey);
         for (const t of tplItems) {
-          const title = t.title?.trim();
+          const title = (t.title ?? "").trim();
           if (!title || !t.dueDate) continue;
 
           const fixedPhase = phaseOf(t.dueDate, target.start, target.end);
           const key = `${cohort}|${t.dueDate}|${title}`;
-          const idx = exists.get(key);
-          if (idx !== undefined) {
+          if (exists.has(key)) {
             skipped++;
             continue;
           }
@@ -281,15 +295,19 @@ export default function Tasks() {
       }
 
       queueMicrotask(() => {
-        alert(`일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`);
+        const baseMsg = canCopyPrev
+          ? `전기수(${prevCohort}) 업무를 복사해 적용했습니다.`
+          : "기본 업무/템플릿으로 채웠습니다.";
+        alert(
+          `${baseMsg}\n\n일괄 등록 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개\n업데이트: ${updated}개`
+        );
       });
 
       return next;
     });
   };
 
-  // ✅ 차수 선택 후, 해당 차수에 할 일이 비어있다면 1회 자동으로 "일괄 등록" 실행
-  //    (반복 실행 방지: ownerUid+cohort 기준으로 로컬에 기록)
+  // ✅ 차수 선택 후, 해당 차수에 할 일이 비어있으면 1회 자동 일괄등록
   useEffect(() => {
     if (!uid || !cohort) return;
     if (!hydrated) return;
@@ -305,83 +323,15 @@ export default function Tasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, cohort, hydrated]);
 
-  if (!ready) return <div style={{ padding: 16 }}>로딩중...</div>;
-
-  return (
-    <div className="page-wrap" style={{ padding: 16 }}>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>할일</h2>
-
-        <select
-          value={cohort ?? ""}
-          onChange={(e) => setCohort(e.target.value as any)}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd" }}
-        >
-          <option value="" disabled>
-            차수 선택
-          </option>
-          {cohorts.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-
-        <button
-          type="button"
-          onClick={onAdd}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          + 추가
-        </button>
-
-        <button
-          type="button"
-          onClick={onBulkSeed}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          업무 일괄 등록
-        </button>
-
-        <div style={{ flex: 1 }} />
-
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="검색(업무/담당자)"
-          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
-        />
-
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as any)}
-          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
-        >
-          <option value="all">전체</option>
-          <option value="pre">사전</option>
-          <option value="during">교육 중</option>
-          <option value="post">사후</option>
-        </select>
+  const Section = ({ title, items }: { title: string; items: Task[] }) => (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+        <div style={{ opacity: 0.7, fontSize: 13 }}>{items.length}개</div>
       </div>
 
-      <div style={{ marginTop: 10, opacity: 0.8 }}>
-        총 {total}개 / 완료 {doneCount}개
-      </div>
-
-      <div ref={listRef} style={{ marginTop: 14, display: "grid", gap: 10 }}>
-        {filtered.map((t) => (
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((t) => (
           <div
             key={t.id}
             style={{
@@ -412,7 +362,15 @@ export default function Tasks() {
                 <div style={{ fontWeight: 800, textDecoration: t.done ? "line-through" : "none" }}>
                   {t.title}
                 </div>
-                <div style={{ fontSize: 13, opacity: 0.8, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    opacity: 0.8,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
                   <span>기한: {t.dueDate}</span>
                   <span>구간: {phaseLabel[t.phase]}</span>
                   <span>담당: {t.assignee || "-"}</span>
@@ -421,9 +379,7 @@ export default function Tasks() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setMenuOpenId((cur) => (cur === t.id ? null : t.id));
-                }}
+                onClick={() => setMenuOpenId((cur) => (cur === t.id ? null : t.id))}
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
@@ -496,12 +452,15 @@ export default function Tasks() {
                       onClick={() => {
                         const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
                         if (!ok) return;
+
+                        // ✅ TS2345 해결: string이 아니라 객체로 전달
                         applyTemplateToAllCohorts({
                           templateId: t.templateId!,
                           title: t.title,
                           assignee: t.assignee ?? "",
-                          offsetDays: 0, // ✅ 그대로 적용(날짜 이동 없음)
+                          offsetDays: 0,
                         });
+
                         setMenuOpenId(null);
                       }}
                       style={{
@@ -564,6 +523,78 @@ export default function Tasks() {
           </div>
         ))}
       </div>
+    </div>
+  );
+
+  if (!ready) return <div style={{ padding: 16 }}>로딩중...</div>;
+
+  return (
+    <div className="page-wrap" style={{ padding: 16 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <h2 style={{ margin: 0 }}>할일</h2>
+
+        <select
+          value={cohort ?? ""}
+          onChange={(e) => setCohort(e.target.value as any)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd" }}
+        >
+          <option value="" disabled>
+            차수 선택
+          </option>
+          {cohorts.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={onAdd}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          + 추가
+        </button>
+
+        <button
+          type="button"
+          onClick={onBulkSeed}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          업무 일괄 등록
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="검색(업무/담당자)"
+          style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd" }}
+        />
+      </div>
+
+      <div style={{ marginTop: 10, opacity: 0.8 }}>
+        총 {total}개 / 완료 {doneCount}개
+      </div>
+
+      <div ref={listRef} style={{ marginTop: 14 }}>
+        <Section title="사전" items={byPhase.pre} />
+        <Section title="교육 중" items={byPhase.during} />
+        <Section title="사후" items={byPhase.post} />
+      </div>
 
       {editing && (
         <div
@@ -616,14 +647,24 @@ export default function Tasks() {
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", fontWeight: 800 }}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    fontWeight: 800,
+                  }}
                 >
                   취소
                 </button>
                 <button
                   type="button"
                   onClick={onEditSave}
-                  style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #ddd", fontWeight: 800 }}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    fontWeight: 800,
+                  }}
                 >
                   저장
                 </button>
