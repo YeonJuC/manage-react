@@ -242,7 +242,6 @@ export default function Tasks() {
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
             origin: src.origin ?? "custom",
-            templateId: (src as any).templateId,
           });
 
           exists.set(key, next.length - 1);

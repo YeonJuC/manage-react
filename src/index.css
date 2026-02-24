@@ -1606,3 +1606,22 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   display: grid;
   gap: 10px;
 }
+/* ===== 할일 행 미세 분리 ===== */
+.dashItem{
+  padding: 10px 12px;                 /* ✅ 살짝만 여백 */
+  border-bottom: 1px solid #f1f5f9;   /* ✅ 거의 안 보이는 구분선 */
+  transition: background .15s ease;
+}
+
+/* 마지막 줄은 선 제거 (깔끔) */
+.dashItem:last-child{
+  border-bottom: none;
+}
+
+/* hover 시 아주 미세하게 */
+.dashItem:hover{
+  background: rgba(37,99,235,0.03);
+}
+.dashItem{
+  border-radius: 10px;
+}
