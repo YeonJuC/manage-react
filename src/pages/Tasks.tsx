@@ -63,6 +63,7 @@ export default function Tasks() {
     bulkDeleteByTemplateId,
   } = useTasksStore();
 
+  // ✅ 완료 항목 접기/펼치기
   const [doneOpen, setDoneOpen] = useState<{ pre: boolean; during: boolean; post: boolean }>({
     pre: false,
     during: false,
@@ -75,9 +76,11 @@ export default function Tasks() {
   const [editPhase, setEditPhase] = useState<Task["phase"]>("during");
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
   const listRef = useRef<HTMLDivElement | null>(null);
   const [q, setQ] = useState("");
 
+  // ✅ 검색 + 현재 차수만
   const visible = useMemo(() => {
     let arr = tasks.filter((t) => t.cohort === cohort);
 
@@ -184,16 +187,91 @@ export default function Tasks() {
     setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
   };
 
+  const getPrevCohort = (ck: CohortKey) => {
+    const order = cohorts.map((c) => c.key);
+    const idx = order.indexOf(ck);
+    return idx > 0 ? (order[idx - 1] as CohortKey) : null;
+  };
+
   /**
-   * ✅ 업무 일괄 등록 (핵심)
-   * - 32기(첫 기수)는 seedTasks32 + templates로 채움
-   * - 그 외 기수는 "바로 전 기수의 실제 tasks(수동 추가 포함)"를 통째로 복사
-   * - 날짜는 (현재기수.start - 전기수.start) 만큼 shift
-   * - phase는 현재기수 기간 기준으로 재계산
-   * - 중복(제목+기한) 방지
-   *
-   * ✅ 추가 규칙
-   * - 전기수 복사로 넘어온 건 templateId 복사 금지 (⋯ 메뉴 안 뜨게)
+   * ✅ 전기수 "추가 반영"(동기화)
+   * - 이미 현재 기수에 업무가 있어도 OK
+   * - 전기수에서 나중에 수동으로 추가한 것까지, 중복(제목+기한) 제외하고 현재 기수로 "추가"만 함
+   * - 날짜 shift + phase 재계산
+   * - templateId는 절대 복사하지 않음(⋯ 제거)
+   */
+  const onMergePrev = () => {
+    if (!cohort) return;
+
+    const target = cohortDates[cohort as CohortKey];
+    if (!target) return alert("선택한 차수에 대한 일정 정보가 없습니다.");
+
+    const prevCohort = getPrevCohort(cohort as CohortKey);
+    if (!prevCohort) return alert("전기수가 없습니다.");
+
+    const prevDates = cohortDates[prevCohort];
+    if (!prevDates) return alert("전기수 일정 정보가 없습니다.");
+
+    const prevTasks = tasks.filter((t) => t.cohort === prevCohort);
+    if (prevTasks.length === 0) {
+      return alert("전기수 업무가 아직 로드되지 않았거나 비어있습니다.\n(잠깐 기다렸다가 다시 시도)");
+    }
+
+    let added = 0;
+    let skipped = 0;
+
+    setTasksAndSave((prev) => {
+      let next = prev;
+
+      // 현재 기수 중복 체크 키
+      const exists = new Set<string>();
+      next.forEach((t) => {
+        if (t.cohort !== cohort) return;
+        exists.add(`${t.dueDate}|${t.title}`);
+      });
+
+      const delta = diffDays(parseYmd(target.start), parseYmd(prevDates.start));
+
+      for (const src of prevTasks) {
+        const title = (src.title ?? "").trim();
+        if (!title || !src.dueDate) continue;
+
+        const shiftedDue = fmtYmd(addDays(parseYmd(src.dueDate), delta));
+        const shiftedPhase = phaseOf(shiftedDue, target.start, target.end);
+
+        const key = `${shiftedDue}|${title}`;
+        if (exists.has(key)) {
+          skipped++;
+          continue;
+        }
+
+        next = addTask(next, {
+          cohort,
+          title,
+          dueDate: shiftedDue,
+          phase: shiftedPhase,
+          assignee: src.assignee ?? "",
+          origin: "custom",
+          templateId: undefined, // ✅ ⋯ 안 뜨게
+        });
+
+        exists.add(key);
+        added++;
+      }
+
+      queueMicrotask(() => {
+        alert(`전기수 반영 완료 ✅\n추가: ${added}개\n중복 스킵: ${skipped}개`);
+      });
+
+      return next;
+    });
+  };
+
+  /**
+   * ✅ 업무 일괄 등록(초기 채우기)
+   * - 전기수 있으면: 전기수 전체 복사(중복 제외)
+   * - 없으면: seed + templates
+   * - 전기수 복사본은 templateId 복사 금지(⋯ 제거)
    */
   const onBulkSeed = () => {
     if (!cohort) return;
@@ -201,10 +279,7 @@ export default function Tasks() {
     const target = cohortDates[cohort as CohortKey];
     if (!target) return alert("선택한 차수에 대한 일정 정보가 없습니다.");
 
-    const cohortOrder = cohorts.map((c) => c.key);
-    const idx = cohortOrder.indexOf(cohort as CohortKey);
-    const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
-
+    const prevCohort = getPrevCohort(cohort as CohortKey);
     const prevDates = prevCohort ? cohortDates[prevCohort] : null;
 
     let added = 0,
@@ -217,7 +292,6 @@ export default function Tasks() {
       const exists = new Map<string, number>();
       next.forEach((t, i) => exists.set(`${t.cohort}|${t.dueDate}|${t.title}`, i));
 
-      // ✅ 전기수 복사 가능 여부
       const prevTasks = prevCohort ? prev.filter((t) => t.cohort === prevCohort) : [];
       const canCopyPrev = !!prevCohort && prevTasks.length > 0 && !!prevDates;
 
@@ -244,14 +318,13 @@ export default function Tasks() {
             phase: shiftedPhase,
             assignee: src.assignee ?? "",
             origin: src.origin ?? "custom",
-            templateId: undefined, // ✅ 전기수 복사본은 템플릿 취급 X (⋯ 제거)
+            templateId: undefined, // ✅ 전기수 복사본은 템플릿 아님(⋯ 제거)
           });
 
           exists.set(key, next.length - 1);
           added++;
         }
       } else {
-        // ✅ 첫 기수(32기) 등 "복사할 전기수 데이터가 없을 때"만 seed + templates로 채움
         const baseKey = cohorts.find((c) => c.label.includes("32기"))?.key as CohortKey | undefined;
         const base = baseKey ? cohortDates[baseKey] : null;
         const delta = base ? diffDays(parseYmd(target.start), parseYmd(base.start)) : 0;
@@ -332,9 +405,9 @@ export default function Tasks() {
   };
 
   /**
-   * ✅ 새로고침 시 33기부터 비어버리는 문제 해결
-   * - 전기수 복사 케이스에서는 "전기수 tasks가 로드된 뒤"에만 자동 seed 실행
-   * - seeded 키는 실행 후에 찍음 (실행 전에 찍으면 실패해도 재시도 못함)
+   * ✅ 자동 일괄등록 (새로고침 시 비는 문제 방지)
+   * - 전기수 복사 케이스: 전기수 데이터가 로드된 뒤에만 1회 실행
+   * - seeded 키는 실행 후에 찍음
    */
   useEffect(() => {
     if (!uid || !cohort) return;
@@ -343,21 +416,16 @@ export default function Tasks() {
     const alreadyKey = `seeded_${uid}_${cohort}`;
     if (localStorage.getItem(alreadyKey) === "1") return;
 
-    // 이미 해당 기수 데이터가 있으면 seeded 처리하고 종료
     const hasAny = tasks.some((t) => t.cohort === cohort);
     if (hasAny) {
       localStorage.setItem(alreadyKey, "1");
       return;
     }
 
-    // 전기수 복사 케이스는 전기수 데이터가 들어온 뒤에만 실행
-    const cohortOrder = cohorts.map((c) => c.key);
-    const idx = cohortOrder.indexOf(cohort as CohortKey);
-    const prevCohort = idx > 0 ? (cohortOrder[idx - 1] as CohortKey) : null;
-
+    const prevCohort = getPrevCohort(cohort as CohortKey);
     if (prevCohort) {
       const prevLoaded = tasks.some((t) => t.cohort === prevCohort);
-      if (!prevLoaded) return; // ✅ 전기수 로딩 대기
+      if (!prevLoaded) return; // 전기수 로딩 대기
     }
 
     onBulkSeed();
@@ -366,9 +434,7 @@ export default function Tasks() {
   }, [uid, cohort, hydrated, tasks]);
 
   /**
-   * ✅ (이미 넘어와서 ⋯ 뜨는 경우) 해당 기수의 templateId를 1회 제거
-   * - 전기수 복사본은 templateId 없어야 하므로, 기존 데이터 정리
-   * - 한 번만 실행하도록 localStorage로 가드
+   * ✅ (이미 templateId가 박혀서 ⋯ 뜨는 기존 데이터) 1회 제거
    */
   useEffect(() => {
     if (!uid || !cohort) return;
@@ -432,7 +498,6 @@ export default function Tasks() {
             style={{ width: 18, height: 18, accentColor: "#2563eb", cursor: "pointer" }}
             aria-label="완료 토글"
           />
-
           <div style={{ minWidth: 0 }}>
             <div className={`dashItemTitle ${t.done ? "is-done" : ""}`}>{t.title}</div>
             <div className="dashItemDate">
@@ -442,7 +507,6 @@ export default function Tasks() {
         </label>
 
         <div className="actions">
-          {/* 담당/수정/삭제만 남게 */}
           <button type="button" className="btn-edit" title="담당자" onClick={() => onSetAssignee(t.id)}>
             담당
           </button>
@@ -591,6 +655,11 @@ export default function Tasks() {
 
         <button type="button" className="btn btn--ghost" onClick={onBulkSeed}>
           업무 일괄 등록
+        </button>
+
+        {/* ✅ 전기수에서 "나중에 수동 추가한 것"까지 현재 기수로 추가 반영 */}
+        <button type="button" className="btn btn--ghost" onClick={onMergePrev}>
+          전기수 반영
         </button>
 
         <div style={{ flex: 1 }} />
