@@ -63,6 +63,14 @@ export default function Tasks() {
     bulkDeleteByTemplateId,
   } = useTasksStore();
 
+  const ASSIGNEE_OPTIONS = [
+    { value: "", label: "담당자" },
+    { value: "차연주", label: "차연주사원" },
+    { value: "한원석", label: "한원석교수" },
+    { value: "포스텍", label: "포스텍" },
+    { value: "대한상공회의소", label: "대한상공회의소" },
+  ];
+
   // 완료 항목 접기/펼치기(기본: 접힘)
   const [doneOpen, setDoneOpen] = useState<{ pre: boolean; during: boolean; post: boolean }>({
     pre: false,
@@ -364,9 +372,18 @@ export default function Tasks() {
         </label>
 
         <div className="actions">
-          <button type="button" className="btn-pill" onClick={() => onSetAssignee(t.id)}>
-            담당자
-          </button>
+          <select
+            className="assigneeSelect"
+            value={t.assignee ?? ""}
+            onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
+            aria-label="담당자 선택"
+          >
+            {ASSIGNEE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <button type="button" className="btn-edit" onClick={() => onEditOpen(t)}>
             수정
           </button>

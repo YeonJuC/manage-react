@@ -1635,3 +1635,12 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   cursor: pointer;
 }
 .btn-pill:hover { background: rgba(59,130,246,0.08); }
+
+.assigneeSelect{
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 800;
+}
