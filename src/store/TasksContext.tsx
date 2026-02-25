@@ -425,7 +425,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
     }
 
-    if !uid || !ownerUid || !hydrated) return;
+    if (!uid || !ownerUid || !hydrated) return;
     if (!nextCohort) return;
 
     if (navigator.onLine) void saveCohort(ownerUid, nextCohort);
