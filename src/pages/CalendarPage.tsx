@@ -3,10 +3,10 @@ import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { cohorts, type CohortKey } from "../data/templates";
 import { addTask, deleteTask, setAssignee, toggleTask, type Task } from "../store/tasks";
-import { useLocation } from "react-router-dom";
 import { useTasksStore } from "../store/TasksContext";
 import { cohortDates } from "../data/cohortDates";
 import { getKoreanHolidays, type KRHoliday } from "../utils/holidays";
+import { dismissTemplateForCohort } from "../store/customTemplates"; // ✅ 추가
 
 /** 날짜 키: YYYY-MM-DD */
 function ymd(date: Date) {
@@ -25,21 +25,15 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [newTitle, setNewTitle] = useState("");
 
-  // ✅ 추가: 현재 보고 있는 캘린더 월(연도) 기준
   const [activeStartDate, setActiveStartDate] = useState<Date>(new Date());
 
   // 수정 모달
   const [editing, setEditing] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
-  
-  // ✅ 공휴일 state
-  const [holidays, setHolidays] = useState<KRHoliday[]>([]);
-  useEffect(() => {
-    console.log("[holidays loaded]", holidays.length, holidays.slice(0, 5));
-  }, [holidays]);
 
-  // ✅ activeStartDate(연도) 바뀌면 공휴일 재조회
+  // 공휴일
+  const [holidays, setHolidays] = useState<KRHoliday[]>([]);
   useEffect(() => {
     const y = activeStartDate.getFullYear();
     getKoreanHolidays(y)
@@ -51,7 +45,6 @@ export default function CalendarPage() {
   }, [activeStartDate]);
 
   const selectedYmd = useMemo(() => ymd(selectedDate), [selectedDate]);
-
   const holidayOf = (date: Date) => holidays.find((h) => h.date === ymd(date));
 
   /** 선택 차수의 task만 */
@@ -106,6 +99,20 @@ export default function CalendarPage() {
     setEditing(null);
   };
 
+  // ✅ 삭제(템플릿 업무는 dismiss까지 같이)
+  const onDelete = (t: Task) => {
+    if (!cohort) return;
+    const ok = window.confirm("이 할 일을 삭제할까요?");
+    if (!ok) return;
+
+    // 템플릿에서 생성된 업무면: 다시 생기지 않게 dismiss 처리
+    if (t.templateId) {
+      dismissTemplateForCohort(String(cohort), t.templateId);
+    }
+
+    setTasksAndSave((prev) => deleteTask(prev, t.id));
+  };
+
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
   if (!uid) return <div className="card" style={{ padding: 16 }}>로그인이 필요합니다.</div>;
   if (!hydrated) return <div className="card" style={{ padding: 16 }}>데이터 불러오는 중…</div>;
@@ -153,25 +160,17 @@ export default function CalendarPage() {
               value={selectedDate}
               tileClassName={({ date, view }) => {
                 if (view !== "month") return "";
-
                 const classes: string[] = [];
-
-                // 공휴일 클래스
                 if (holidayOf(date)) classes.push("holiday");
 
-                // 할 일 상태 클래스
                 const s = getDayStatus(date);
                 if (s === "done") classes.push("cal-day-done");
                 if (s === "todo") classes.push("cal-day-todo");
-
                 return classes.join(" ");
               }}
               tileContent={({ date, view }) => {
                 if (view !== "month") return null;
-
                 const h = holidayOf(date);
-                const s = getDayStatus(date);
-
                 return (
                   <>
                     {h && (
@@ -189,7 +188,6 @@ export default function CalendarPage() {
         <div className="card">
           <h3 style={{ marginTop: 0 }}>{selectedYmd}</h3>
 
-          {/* 선택한 날짜가 공휴일이면 이름 보여주기 */}
           {cohort && (() => {
             const h = holidayOf(selectedDate);
             return h ? (
@@ -270,40 +268,14 @@ export default function CalendarPage() {
                         <option value="포스텍">포스텍</option>
                       </select>
 
-                      <button
-                        className="btn-edit"
-                        onClick={() => openEdit(t)}
-                        style={{
-                          height: 34,
-                          padding: "0 10px",
-                          borderRadius: 10,
-                          border: "1px solid var(--border)",
-                          background: "#fff",
-                          cursor: "pointer",
-                          fontWeight: 700,
-                        }}
-                      >
+                      <button className="btn-edit" onClick={() => openEdit(t)}>
                         수정
                       </button>
 
-                      {t.id.includes(":custom:") && (
-                        <button
-                          className="btn-del"
-                          onClick={() => setTasksAndSave((prev) => deleteTask(prev, t.id))}
-                          style={{
-                            height: 34,
-                            padding: "0 10px",
-                            borderRadius: 10,
-                            border: "1px solid var(--border)",
-                            background: "#fff",
-                            cursor: "pointer",
-                            fontWeight: 700,
-                          }}
-                          title="수동으로 추가한 할 일 삭제"
-                        >
-                          삭제
-                        </button>
-                      )}
+                      {/* ✅ 모든 할 일 삭제 가능 + 템플릿은 dismiss 처리 */}
+                      <button className="btn-del" onClick={() => onDelete(t)} title="할 일 삭제">
+                        삭제
+                      </button>
                     </div>
                   </div>
 
@@ -313,7 +285,6 @@ export default function CalendarPage() {
             </div>
           )}
 
-          {/* 수정 모달 */}
           {editing && (
             <div
               onClick={() => setEditing(null)}
@@ -370,7 +341,7 @@ export default function CalendarPage() {
                   </div>
 
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
-                    <button className="btn" onClick={() => setEditing(null)}>취소</button>
+                    <button className="btn btn--ghost" onClick={() => setEditing(null)}>취소</button>
                     <button className="btn" onClick={saveEdit}>저장</button>
                   </div>
                 </div>

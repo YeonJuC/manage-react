@@ -364,8 +364,8 @@ export default function Tasks() {
         </label>
 
         <div className="actions">
-          <button type="button" className="btn-more" title="담당자" onClick={() => onSetAssignee(t.id)}>
-            담당
+          <button type="button" className="btn-pill" onClick={() => onSetAssignee(t.id)}>
+            담당자
           </button>
           <button type="button" className="btn-edit" onClick={() => onEditOpen(t)}>
             수정

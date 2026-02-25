@@ -1625,3 +1625,13 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 .dashItem{
   border-radius: 10px;
 }
+.btn-pill {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.btn-pill:hover { background: rgba(59,130,246,0.08); }
