@@ -80,6 +80,7 @@ function saveSeeded(ownerUid: string | null, m: Record<string, boolean>) {
 }
 
 const LS_COHORT_BASE = "manage-react:cohort";
+const LS_COHORT_AT_BASE = "manage-react:cohortUpdatedAt";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
 
@@ -140,36 +141,19 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  const didAutoPickViewMode = useRef(false);
+  /**
+   * ✅ 중요: 자동으로 common으로 바꾸지 않음
+   * - 연주님 케이스(32기 쓰다 껐다 켜면 33기 뜸)는 이 자동 전환이 원인인 경우가 많음
+   * - 공용은 버튼/토글로 들어가게만 두자
+   */
   useEffect(() => {
-    if (didAutoPickViewMode.current) return;
     if (!ready) return;
     if (!uid) return;
+    // "처음 실행"이라도 기본 mine 고정
+    setViewModeState((prev) => prev ?? "mine");
+  }, [ready, uid]);
 
-    let hasPref = false;
-    try {
-      const raw = typeof window !== "undefined" ? localStorage.getItem(LS_VIEWMODE) : null;
-      hasPref = raw === "mine" || raw === "common";
-    } catch {
-      hasPref = false;
-    }
-    if (hasPref) {
-      didAutoPickViewMode.current = true;
-      return;
-    }
-
-    if (commonOwnerUid && uid !== commonOwnerUid) {
-      setViewMode("common");
-    } else {
-      setViewMode("mine");
-    }
-    didAutoPickViewMode.current = true;
-  }, [ready, uid, commonOwnerUid, setViewMode]);
-
-  const ownerUid = useMemo(
-    () => getOwnerUid(uid, viewMode, commonOwnerUid),
-    [uid, viewMode, commonOwnerUid]
-  );
+  const ownerUid = useMemo(() => getOwnerUid(uid, viewMode, commonOwnerUid), [uid, viewMode, commonOwnerUid]);
 
   const [stateOwnerUid, setStateOwnerUid] = useState<string | null>(null);
   const reloadSeq = useRef(0);
@@ -191,7 +175,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setHydrated(false);
 
     const fallbackToLocal = () => {
-      // ✅ storage 래퍼로 통일
       setCohort(loadJSONLocal<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
       setTasks(loadJSONLocal<Task[]>(lsKey(LS_TASKS_BASE, ownerUid), []));
     };
@@ -221,8 +204,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       setCohort(savedCohort ?? "");
       setTasks(filteredTasks);
 
-      // ✅ storage 래퍼로 통일
+      // ✅ 로컬 캐시 갱신(차수 + 타임스탬프)
       saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
+      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
     } catch {
       fallbackToLocal();
     } finally {
@@ -259,6 +243,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     void reload();
   }, [uid, ownerUid, reload]);
 
+  /**
+   * ✅ cohort가 정해졌을 때:
+   * - mine 모드면 cohort를 원격에 저장 + (필요 시) 템플릿 시딩/커스텀 템플릿 materialize
+   * - common 모드면 로컬에만 저장(공용이 갑자기 내 데이터 덮어쓰는 사고 예방)
+   */
   useEffect(() => {
     if (!uid || !ownerUid) return;
     if (!hydrated) return;
@@ -270,6 +259,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
     if (viewMode === "common") {
       saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), cohort);
+      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
       return;
     }
 
@@ -309,13 +299,14 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           existsTemplateIds.add(it.templateId);
         }
 
-        // ✅ storage 래퍼로 통일 (이게 핵심)
+        // ✅ 로컬 캐시도 항상 갱신
         saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
         return next;
       });
 
       saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), ck);
+      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
     })();
   }, [uid, ownerUid, viewMode, hydrated, cohort]);
 
@@ -325,7 +316,6 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       const next = updater(prev);
 
       if (ownerUid) {
-        // ✅ storage 래퍼로 통일 (이게 새로고침 복구를 잡음)
         saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
       }
@@ -396,9 +386,18 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  /**
+   * ✅ cohort 변경 시:
+   * - 로컬에 즉시 저장(마지막 접속 차수 복구)
+   * - mine 모드 + 온라인이면 원격에도 저장
+   */
   const setCohortAndSave = (nextCohort: CohortKey | "") => {
     setCohort(nextCohort);
-    if (ownerUid) saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
+
+    if (ownerUid) {
+      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
+      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+    }
 
     if (!uid || !ownerUid || !hydrated) return;
     if (!nextCohort) return;
