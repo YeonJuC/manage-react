@@ -84,6 +84,9 @@ const LS_COHORT_AT_BASE = "manage-react:cohortUpdatedAt";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
 
+// ✅ 공용(viewMode=common)에서 "뷰어(내 uid)별" 마지막 선택 차수 저장 키
+const LS_COMMON_VIEW_COHORT = "manage-react:commonViewCohort";
+
 function parseYmd(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
@@ -143,13 +146,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * ✅ 중요: 자동으로 common으로 바꾸지 않음
-   * - 연주님 케이스(32기 쓰다 껐다 켜면 33기 뜸)는 이 자동 전환이 원인인 경우가 많음
-   * - 공용은 버튼/토글로 들어가게만 두자
+   * - 공용은 사용자가 버튼/토글로 들어가게 유지
    */
   useEffect(() => {
     if (!ready) return;
     if (!uid) return;
-    // "처음 실행"이라도 기본 mine 고정
     setViewModeState((prev) => prev ?? "mine");
   }, [ready, uid]);
 
@@ -175,14 +176,29 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     setHydrated(false);
 
     const fallbackToLocal = () => {
-      setCohort(loadJSONLocal<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
+      // ✅ 공용은 뷰어별 cohort 키에서 복원
+      if (viewMode === "common") {
+        setCohort(loadJSONLocal<CohortKey | "">(lsKey(LS_COMMON_VIEW_COHORT, uid), ""));
+      } else {
+        setCohort(loadJSONLocal<CohortKey | "">(lsKey(LS_COHORT_BASE, ownerUid), ""));
+      }
       setTasks(loadJSONLocal<Task[]>(lsKey(LS_TASKS_BASE, ownerUid), []));
     };
 
     const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8000));
 
     try {
-      const job = Promise.all([loadCohort(ownerUid), loadTasks(ownerUid)]);
+      // ✅ 공용(common)일 때:
+      // - cohort는 Firestore에서 읽지 않고 "내 uid 기준 로컬"에서만 복원
+      // - tasks는 공용 ownerUid로 Firestore/로컬 동기화 유지
+      const job =
+        viewMode === "common"
+          ? Promise.all([
+              Promise.resolve(loadJSONLocal<CohortKey | "">(lsKey(LS_COMMON_VIEW_COHORT, uid), "")),
+              loadTasks(ownerUid),
+            ])
+          : Promise.all([loadCohort(ownerUid), loadTasks(ownerUid)]);
+
       const res = await Promise.race([job, timeout]);
 
       if (res === "timeout") {
@@ -204,15 +220,19 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       setCohort(savedCohort ?? "");
       setTasks(filteredTasks);
 
-      // ✅ 로컬 캐시 갱신(차수 + 타임스탬프)
-      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
-      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+      // ✅ 로컬 캐시 갱신(공용은 뷰어별 키로, 내꺼는 ownerUid 키로)
+      if (viewMode === "common") {
+        saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), savedCohort ?? "");
+      } else {
+        saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
+        saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+      }
     } catch {
       fallbackToLocal();
     } finally {
       if (seq === reloadSeq.current) setHydrated(true);
     }
-  }, [uid, ownerUid]);
+  }, [uid, ownerUid, viewMode]);
 
   useEffect(() => {
     if (!ownerUid) return;
@@ -245,8 +265,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * ✅ cohort가 정해졌을 때:
-   * - mine 모드면 cohort를 원격에 저장 + (필요 시) 템플릿 시딩/커스텀 템플릿 materialize
-   * - common 모드면 로컬에만 저장(공용이 갑자기 내 데이터 덮어쓰는 사고 예방)
+   * - mine 모드면 cohort를 원격에 저장 + 템플릿 시딩/커스텀 템플릿 materialize
+   * - common 모드면 "cohort는 로컬(뷰어별)만" 저장
    */
   useEffect(() => {
     if (!uid || !ownerUid) return;
@@ -258,8 +278,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     const ck = cohort as CohortKey;
 
     if (viewMode === "common") {
-      saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), cohort);
-      saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+      // ✅ 공용에서는 cohort를 Firestore에 저장하지 않음(공용 기본값 덮어쓰기 방지)
+      saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), ck);
       return;
     }
 
@@ -299,12 +319,13 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           existsTemplateIds.add(it.templateId);
         }
 
-        // ✅ 로컬 캐시도 항상 갱신
+        // ✅ 로컬 캐시 갱신 (tasks는 ownerUid 기준)
         saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
         return next;
       });
 
+      // ✅ 내 모드에서는 cohort 로컬도 갱신
       saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), ck);
       saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
     })();
@@ -388,20 +409,24 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * ✅ cohort 변경 시:
-   * - 로컬에 즉시 저장(마지막 접속 차수 복구)
-   * - mine 모드 + 온라인이면 원격에도 저장
+   * - mine 모드: ownerUid 기준 로컬 저장 + (온라인) 원격 저장
+   * - common 모드: "내 uid 기준 로컬"에만 저장 (공용 기본값 덮어쓰기 방지)
    */
   const setCohortAndSave = (nextCohort: CohortKey | "") => {
     setCohort(nextCohort);
+
+    if (viewMode === "common") {
+      if (uid) saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), nextCohort);
+      return;
+    }
 
     if (ownerUid) {
       saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
       saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
     }
 
-    if (!uid || !ownerUid || !hydrated) return;
+    if !uid || !ownerUid || !hydrated) return;
     if (!nextCohort) return;
-    if (viewMode === "common") return;
 
     if (navigator.onLine) void saveCohort(ownerUid, nextCohort);
   };
