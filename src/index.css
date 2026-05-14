@@ -1644,3 +1644,34 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
   background: #fff;
   font-weight: 800;
 }
+.nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0 4px;
+}
+
+.nav-section-title {
+  padding: 8px 12px 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.nav-external {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #555;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nav-external:hover {
+  background: #f8fafc;
+  color: var(--primary);
+}
+
+.nav-external:visited {
+  color: #555;
+}
