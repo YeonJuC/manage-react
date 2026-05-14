@@ -34,6 +34,21 @@ export default function AppShell() {
           <NavLink to="/" style={linkStyle} end>대시보드</NavLink>
           <NavLink to="/tasks" style={linkStyle}>할 일</NavLink>
           <NavLink to="/calendar" style={linkStyle}>캘린더</NavLink>
+
+          <div className="nav-divider" />
+          <div className="nav-section-title">바로가기</div>
+          <a className="nav-external" href="https://youth.posco.com/posco/edu/index.php?mod=academy&pag=aca01#khwhat" target="_blank" rel="noreferrer">
+            AI ⋅ BigData 아카데미 홈페이지
+          </a>
+          <a className="nav-external" href="https://notice-app-f3aa0.web.app/" target="_blank" rel="noreferrer">
+            교육생 공지 대시보드
+          </a>
+          <a className="nav-external" href="https://posco.atosoft.kr/worknet/Course/CourseList.asp" target="_blank" rel="noreferrer">
+            대한상의 LMS(출결)
+          </a>
+          <a className="nav-external" href="https://attendance-checkin-d1a9b.web.app/admin" target="_blank" rel="noreferrer">
+            자체 출석체크
+          </a>
         </nav>
 
         <div className="sidebar-footer auth-float">
