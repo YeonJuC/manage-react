@@ -1,0 +1,1675 @@
+:root {
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-soft: #eef2ff;
+  --sidebarW: 260px;
+}
+
+* { box-sizing: border-box;}
+html, body { margin: 0; padding: 0; overflow-x: hidden; }
+body { background: var(--bg); color: var(--text); font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.main, .content, .card { min-width: 0; }
+
+.app{
+  min-height: 100vh;
+}
+
+/* sidebar 고정 */
+.sidebar{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebarW);
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 20;
+}
+
+/* main은 사이드바 만큼 오른쪽으로 */
+.main{
+  margin-left: var(--sidebarW);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ✅ 사이드바 하단 카드(로그인 영역) 고정 */
+.sidebar-footer{
+  margin-top: auto;         /* 기본적으로 맨 아래로 밀기 */
+  position: sticky;
+  bottom: 12px;
+  background: var(--panel);
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.dash-item:hover {
+  background: rgba(59,130,246,0.06);
+}
+
+.nav { display: flex; flex-direction: column; gap: 6px; }
+
+.nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0 4px;
+}
+
+.nav-section-title {
+  padding: 4px 12px 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: -0.2px;
+}
+
+.nav-external {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #555;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nav-external:hover {
+  background: #f8fafc;
+  color: var(--primary);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.main { display: flex; flex-direction: column; }
+
+.topbar {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.8);
+  backdrop-filter: blur(6px);
+}
+
+.topbar-title { font-weight: 800; }
+.topbar-actions { display: flex; gap: 10px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  height: 40px;
+  padding: 0 18px;
+
+  border-radius: 999px; /* 통통한 핵심 */
+  border: 1px solid var(--primary);
+
+  background: var(--primary);
+  color: #fff;
+
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  padding: 0 14px; /* 좌우 여백 */
+  font-weight: 700;
+}
+
+.btn:hover {
+  filter: brightness(0.95);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+  filter: brightness(0.9);
+}
+
+.btn--ghost {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: none;
+}
+
+.content {
+  padding: 18px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.card p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ===== Calendar polish ===== */
+/* ===== Calendar polish (stable) ===== */
+.react-calendar {
+  width: 100% !important;
+  border: none !important;
+  background: var(--panel) !important;
+  font-family: inherit !important;
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+}
+
+.react-calendar__navigation {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.react-calendar__navigation button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.react-calendar__navigation button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.react-calendar__month-view__weekdays {
+  text-transform: none;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+/* ✅ 요게 중요: 요일/주/타일 레이아웃 깨지는 걸 막음 */
+.react-calendar__month-view__weekdays,
+.react-calendar__month-view__weekdays__weekday,
+.react-calendar__month-view__days,
+.react-calendar__month-view__days__day {
+  overflow: visible;
+}
+
+/* ✅ 7열 고정 */
+.react-calendar__month-view__days {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ✅ 날짜 타일 카드처럼 */
+.react-calendar__tile {
+  border-radius: 14px;
+  padding: 14px 6px;
+  font-size: 14px;
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--border);
+  min-height: 72px; /* 박스 높이 통일 */
+}
+
+/* hover */
+.react-calendar__tile:enabled:hover {
+  background: var(--primary-soft);
+}
+
+/* 오늘 */
+.react-calendar__tile--now {
+  background: #f1f5ff;
+}
+
+/* 선택한 날짜 */
+.react-calendar__tile--active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+/* 다른 달 날짜 (회색) */
+.react-calendar__month-view__days__day--neighboringMonth {
+  opacity: 0.35;
+}
+
+/* ✅ 아래 점(마커) 위치 고정 */
+.cal-marker{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ✅ 마커 문자를 아예 숨기고, pseudo-element로 동그라미를 그림 */
+.cal-marker .dot{
+  font-size: 0 !important;     /* 문자(•) 렌더링 제거 */
+  line-height: 0 !important;
+}
+
+/* 실제 점 */
+.cal-marker .dot::before{
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* 상태별 색 유지 */
+.cal-marker .dot.on{ color: var(--primary); }
+.cal-marker .dot.done{ color: #10b981; }
+
+/* 선택된 날짜는 흰색 */
+.react-calendar__tile--active .cal-marker .dot.on,
+.react-calendar__tile--active .cal-marker .dot.done{
+  color: #fff;
+}
+
+/* 진행중/완료 하이라이트 */
+.react-calendar__tile.cal-day-todo{
+  outline: 2px solid rgba(37, 99, 235, 0.18);
+}
+
+.react-calendar__tile.cal-day-done{
+  background: #ecfdf5;
+  outline: 2px solid rgba(16, 185, 129, 0.20);
+}
+
+.react-calendar__tile--active.cal-day-done{
+  background: var(--primary) !important;
+  outline: none;
+}
+
+/* dot 기본/상태 */
+.cal-marker {
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.cal-marker .dot {
+  opacity: 0;
+  font-size: 16px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.cal-marker .dot.on {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.cal-marker .dot.done {
+  opacity: 1;
+  color: #10b981;
+}
+
+.react-calendar__tile--active .cal-marker .dot.on,
+.react-calendar__tile--active .cal-marker .dot.done {
+  color: #fff;
+}
+
+/* Calendar page layout */
+.calendar-layout{
+  display: grid;
+  grid-template-columns: 520px 1fr; /* 왼쪽 넓혀서 달력 여유 */
+  gap: 14px;
+  align-items: start;
+  padding-top: 14px;
+}
+
+/* ===== Dashboard small components ===== */
+/* ===== Dashboard Layout ===== */
+.dashPage { display: grid; gap: 12px; }
+
+.dashTop{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+}
+.dashH1{ margin:0; font-size:20px; font-weight:900; letter-spacing:-0.2px; }
+.dashHint{ margin-top:6px; font-size:13px; color:var(--muted); }
+.dashGoBtn{ height:34px; border-radius:12px; }
+
+.dashRow{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.dashSelect{
+  height:36px;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid var(--border);
+}
+.dashMuted{ color:var(--muted); }
+
+.dashStats{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.dashStatLabel{ font-size:12px; color:var(--muted); }
+.dashStatValue{ font-size:28px; font-weight:900; margin-top:6px; }
+
+/* ✅ 3박스 한 화면 */
+.dashTri{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.dashBox{ padding:12px; }
+.dashBox--danger{ border-color: rgba(239,68,68,0.35); }
+
+.dashBoxHead{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:10px;
+}
+.dashBoxTitle{ margin:0; font-size:14px; font-weight:900; }
+.dashBoxSub{ margin-top:4px; font-size:12px; color:var(--muted); }
+.dashMiniBtn{ height:34px; border-radius:12px; }
+
+.dashEmpty{ color:var(--muted); font-size:13px; padding:6px 2px; }
+
+/* 리스트 전체 폭 제한 */
+.dashList {
+  max-width: 760px;   /* ← 원하는 가로 길이 */
+  width: 100%;
+  margin: 0 auto;     /* 가운데 정렬 */
+  display: grid;
+  gap: 10px;
+}
+
+.dashItem{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+}
+
+.dashItem > label{
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashItem .actions{
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashItemTitle{
+  font-weight:800;
+  font-size:13px;
+  line-height:1.2;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.dashItemDate{
+  font-size:12px;
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+.dashItemTitle.is-done{
+  text-decoration: line-through;
+}
+
+.dashPill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+
+  border: 1px solid transparent;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.06),
+    inset 0 0 0 1px rgba(255,255,255,0.6);
+}
+
+/* 사전 */
+.dashPill--pre{
+  color: #4338ca;
+  background: linear-gradient(
+    135deg,
+    rgba(99,102,241,0.18),
+    rgba(99,102,241,0.08)
+  );
+  border-color: rgba(99,102,241,0.35);
+}
+
+/* 교육중 */
+.dashPill--during{
+  color: #15803d;
+  background: linear-gradient(
+    135deg,
+    rgba(34,197,94,0.18),
+    rgba(34,197,94,0.08)
+  );
+  border-color: rgba(34,197,94,0.35);
+}
+
+/* 사후 */
+.dashPill--post{
+  color: #b45309;
+  background: linear-gradient(
+    135deg,
+    rgba(245,158,11,0.18),
+    rgba(245,158,11,0.08)
+  );
+  border-color: rgba(245,158,11,0.35);
+}
+
+.dashPill::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modal{
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+.modalField{
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.modalField label{
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modalField input,
+.modalField select{
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.modalActions{
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* ✅ 데스크탑/모바일 공통: 수정/삭제 버튼 기본 스타일 */
+.btn-edit,
+.btn-del{
+  -webkit-appearance: none;
+  appearance: none;
+
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  transition: transform .12s ease, filter .12s ease;
+}
+
+/* 공통 */
+.btn-edit,
+.btn-del{
+  -webkit-appearance: none;
+  appearance: none;
+
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+
+  transition: transform .12s ease, filter .12s ease;
+}
+
+/* 수정 버튼 (연한 블루) */
+.btn-edit{
+  background: #eef2ff;     /* 연한 블루 */
+  color: #2563eb;          /* 블루 텍스트 */
+}
+
+/* 삭제 버튼 (진한 블루) */
+.btn-del{
+  background: #2563eb;     /* 메인 블루 */
+  color: #ffffff;
+}
+
+/* hover / active */
+.btn-edit:hover,
+.btn-del:hover{
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+
+.btn-edit:active,
+.btn-del:active{
+  transform: translateY(0);
+}
+
+.upcomingItem {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* 단계 / 제목 / 날짜 */
+  align-items: center;
+  gap: 12px;
+
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.upcomingListWrap{
+  max-width: 780px;     /* ✅ 여기 숫자만 취향대로 */
+  margin: 0 auto;       /* 가운데 정렬 */
+  padding: 0 12px;      /* 양쪽 여백 */
+}
+
+.upcomingTitle{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.upcomingDate{
+  justify-self: end;
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.upcomingPhase{
+  height: 28px;
+  border-radius: 999px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.upcomingPhase::before{
+  content:"";
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .9;
+}
+
+/* phase 색 */
+.upcomingPhase--pre{ background:#eef2ff; color:#2563eb; }
+.upcomingPhase--during{ background:rgba(34,197,94,0.14); color:#15803d; }
+.upcomingPhase--post{ background:rgba(245,158,11,0.16); color:#b45309; }
+
+/*pdf 파일 버튼*/
+.pdf-btn {
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #f5f7fb;
+  border: 1px solid #e3e7f0;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdf-btn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.pdf-btn:active {
+  transform: translateY(1px);
+}
+
+.pdf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+.pdf-modal {
+  width: min(1100px, 96vw);
+  height: min(88vh, 900px);
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pdf-header {
+  height: 56px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #eef0f4;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.pdf-close {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  font-weight: 700;
+}
+.pdf-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+
+/*전 기수 업로드 버튼*/
+/* actions 영역 기본 */
+.actions{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 담당자 셀렉트 */
+.assigneeSelect{
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+/* ⋯ 버튼 & 메뉴 */
+.moreWrap{
+  position: relative;
+}
+
+.btn-more{
+  height: 34px;
+  width: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.btn-more:hover{
+  background: rgba(59,130,246,0.08);
+}
+
+.moreMenu{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.10);
+  z-index: 30;
+}
+
+.moreItem{
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.moreItem:hover{
+  background: rgba(59,130,246,0.08);
+}
+
+.toast{
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  z-index: 100;
+}
+/* ===== ⋯ More menu ===== */
+.moreWrap { position: relative; }
+
+.btn-more{
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.btn-more:active{ transform: translateY(1px); }
+
+.moreMenu{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.10);
+  display: grid;
+  gap: 4px;
+  z-index: 50;
+}
+
+.moreItem{
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 800;
+}
+
+.moreItem:hover{ background: rgba(59,130,246,0.08); }
+.moreItem:active{ transform: translateY(1px); }
+
+.moreIcon{ font-size: 15px; line-height: 1; }
+.moreLabel{ font-size: 14px; }
+
+.moreItem--danger{ color: #dc2626; }
+.moreItem--danger:hover{ background: rgba(220,38,38,0.08); }
+
+/* ===== Modal polish ===== */
+.modal{
+  width: min(560px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+
+.modal--danger .modalTitle{ color: #dc2626; }
+
+.modalHead{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.modalTitle{ margin: 0; font-size: 18px; font-weight: 900; }
+
+.modalX{
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 900;
+}
+.modalX:hover{ background: rgba(0,0,0,0.04); }
+
+.modalBody{ padding: 6px 2px 2px; }
+.modalMain{ margin: 0; line-height: 1.6; }
+
+.modalWarn{
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(220,38,38,0.08);
+  color: #b91c1c;
+  font-weight: 800;
+}
+.modalWarnIcon{ margin-top: 1px; }
+
+.modalActions--right{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* Danger button */
+.btn--danger{
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+  font-weight: 900 !important;
+}
+.btn--danger:hover{ filter: brightness(0.96); }
+
+.doneHeader { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+.doneToggleBtn { height:28px; padding:0 10px; font-size:12px; white-space:nowrap; border-radius:999px; }
+.doneHiddenText { font-size:12px; white-space:nowrap; }
+.phaseBadge { font-size:12px; padding:6px 10px; white-space:nowrap; border-radius:999px; }
+
+.progressText {
+  font-size: 14px;       /* 기본 (PC) */
+  white-space: nowrap;  /* 줄바꿈 방지 */
+}
+
+.wsBox { position: relative; }
+.wsBtn{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.wsName{ white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+.wsCaret{ opacity: .7; }
+
+.wsMenu{
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.08);
+  padding: 10px;
+  z-index: 50;
+}
+.wsMenuTitle{ font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.wsMenuList{ display:grid; gap: 6px; max-height: 240px; overflow:auto; padding-right: 2px; }
+.wsItem{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: #f7f8ff;
+  cursor:pointer;
+  font-weight: 800;
+}
+.wsItem.is-active{
+  background: #eef2ff;
+  border-color: rgba(37,99,235,.35);
+}
+.wsDot{ opacity:.7; }
+.wsItemLabel{ flex:1; text-align:left; }
+
+.wsCreateBtn{
+  width:100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(37,99,235,.5);
+  background: #fff;
+  font-weight: 900;
+  cursor:pointer;
+}
+/* 공휴일 */
+.holiday {
+  color: #e11d48;
+  font-weight: 700;
+}
+
+/* 공휴일 이름 (칸 안에서 줄바꿈/넘침 방지) */
+.holiday-dot {
+  display: block;
+  font-size: 10px;
+  line-height: 1.1;
+  margin-top: 2px;
+  color: #e11d48;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-marker {
+  margin-top: 2px;
+}
+
+.react-calendar__tile {
+  position: relative;
+}
+
+.holiday-dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 10px;
+  color: #e11d48;
+  font-weight: 700;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.holiday {
+  color: #e11d48;
+  font-weight: 800;
+}
+
+/* ====== Tablet (<= 1024) ====== */
+@media (max-width: 1024px) {
+  .app{
+    grid-template-columns: 240px 1fr;
+  }
+
+  .content{
+    padding: 14px;
+  }
+
+  /* 대시보드 상단 4칸 -> 2칸 */
+  .dash-top-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* 대시보드 하단 2열 -> 1열 */
+  .dash-bottom-grid{
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1100px){
+  .dashTri{ grid-template-columns: 1fr; }
+  .dashStats{ grid-template-columns: 1fr; }
+  .dashTop{ align-items:flex-start; }
+  .dashGoBtn{ margin-left:0; }
+}
+
+/* ====== Mobile (<= 900) ====== */
+@media (max-width: 900px) {
+  :root { --sidebarW: 0px; }
+
+  .sidebar{
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .main{
+    margin-left: 0;
+  }
+
+  .auth-float {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 9999;
+    width: 180px;
+    padding: 0;
+    margin: 0;
+    border-top: none; /* 기존 border-top 제거 */
+  }
+
+  /* 카드 자체를 작게 */
+  .auth-float > div {
+    padding: 10px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+  }
+
+  /* 상태점 숨김(공간 줄이기) */
+  .auth-float span[style*="background: #22c55e"] {
+    display: none;
+  }
+
+  /* 로그아웃 버튼 작게 */
+  .auth-float .btn {
+    height: 34px !important;
+    border-radius: 10px !important;
+    font-size: 13px;
+  }
+
+  /* 로그인 상태 텍스트 줄 간격 */
+  .auth-float div[style*="로그인됨"] {
+    margin-top: 2px !important;
+  }
+
+  .brand{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* 메뉴를 가로 스크롤 탭처럼 */
+  .nav{
+    flex-direction: row !important;
+    gap: 8px !important;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .nav a{
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  /* 로그인 박스는 모바일에서는 아래 content로 내려도 되는데
+     지금은 사이드바 안에 계속 보이게: 가로로 붙여 표시 */
+  .sidebar .sidebar-auth{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .topbar{
+    position: sticky;
+    top: 0;
+    z-index: 9;
+  }
+
+  .content{
+    padding: 12px;
+  }
+
+  /* 대시보드 상단 4칸 -> 1칸 */
+  .dash-top-grid{
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 대시보드 하단도 1칸 */
+  .dash-bottom-grid{
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 캘린더 페이지: 좌(캘린더)/우(목록) -> 세로로 */
+  .calendar-grid{
+    grid-template-columns: 1fr !important;
+  }
+  .react-calendar{
+    height: auto !important;
+    padding: 12px 12px;
+  }
+  /* 7열 유지 + 간격 줄이기 */
+  .react-calendar__month-view__days{
+    gap: 8px;
+  }
+
+  /* 타일이 너무 커서 높이 폭발하는거 줄임 */
+  .react-calendar__tile{
+    min-height: 56px;     /* 기존 72px -> 축소 */
+    padding: 10px 4px;
+    font-size: 13px;
+  }
+
+  /* 점(마커)도 살짝 위로 */
+  .cal-marker{
+    bottom: 8px;
+  }
+  .calendar-layout{
+    grid-template-columns: 1fr; /* 태블릿/모바일은 세로 */
+  }
+  
+  .auth-float{
+    display: none !important;
+  }
+
+  /* 혹시 sidebar-footer(로그인 카드)도 같이 숨기고 싶으면 */
+  .sidebar-footer{
+    display: none !important;
+  }
+
+   /* 타일 기준으로 마커를 "아래 가운데"에 고정 */
+  .react-calendar__tile{
+    position: relative; /* 혹시 빠져있으면 필수 */
+  }
+
+  .cal-marker{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 8px;              /* ✅ 모바일: 조금 위로 */
+    height: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0 !important; /* 기존 margin-top 제거 */
+    pointer-events: none;
+  }
+
+  /* 문자 렌더링 제거 + 점을 pseudo로 */
+  .cal-marker .dot{
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+
+  .cal-marker .dot::before{
+    content: "";
+    display: inline-block;
+    width: 7px;               /* ✅ 점 크기 */
+    height: 7px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0;               /* 기본은 안 보이게 */
+  }
+
+  .cal-marker .dot.on::before,
+  .cal-marker .dot.done::before{
+    opacity: 1;
+  }
+
+  /* 관리시스템 텍스트 안 보이게 */
+  .topbar{
+    display: none;
+  }
+}
+
+@media (max-width: 520px){
+  /* 할 일 한 줄 레이아웃이 깨지지 않게 */
+  .taskRow {
+    display: grid;
+    grid-template-columns: 22px 1fr auto; /* 체크 / 내용 / 우측영역 */
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* 담당자 select 폭 줄이고 줄바꿈 방지 */
+  .taskRow select {
+    width: 108px;           /* ✅ 가로 길이 줄임 */
+    max-width: 108px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* 우측 버튼 영역: 가로로 예쁘게 붙이기 */
+  .taskRow .actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* 수정/삭제 버튼: pill 형태로 정리 */
+  .dashItem .btn-edit,
+  .taskRow .btn-edit,
+  .dashItem .btn-del,
+  .taskRow .btn-del {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;     /* ✅ ‘수정’ ‘삭제’ 줄바꿈 방지 */
+    border: 1px solid var(--border);
+    background: #fff;
+  }
+
+  /* 수정 버튼 톤 (연한 블루) */
+  .dashItem .btn-edit,
+  .taskRow .btn-edit {
+    border: none;                 /* 테두리 제거 */
+    background: #eef2ff;          /* 연한 블루 */
+    color: #2563eb;               /* 블루 텍스트 */
+  }
+
+  /* 삭제 버튼 톤 (진한 블루) */
+  .dashItem .btn-del,
+  .taskRow .btn-del {
+    border: none;                 /* 테두리 제거 */
+    background: #2563eb;          /* 메인 블루 */
+    color: #ffffff;
+  }
+  .dashItemDate{ justify-self:start; }
+
+  .react-calendar{
+    padding: 10px 10px;
+    border-radius: 14px;
+  }
+
+  .react-calendar__month-view__days{
+    gap: 6px; /* ✅ 간격 줄여서 꽉 차지 않게 */
+  }
+
+  .react-calendar__tile{
+    min-height: 46px;  /* ✅ 타일 높이 더 줄임 */
+    padding: 8px 2px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  /* 마커(점)도 같이 줄이기 */
+  .cal-marker{
+    bottom: 6px;
+  }
+  .cal-marker .dot::before{
+    width: 5px;
+    height: 5px;
+  }
+
+  /* 상단 네비 버튼도 조금 컴팩트하게 */
+  .react-calendar__navigation button{
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 520px){
+  .actions{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .actions select{
+    width: 112px;
+    max-width: 112px;
+    height: 34px;
+    border-radius: 12px;
+  }
+
+  .actions .btn-edit,
+  .actions .btn-del{
+    -webkit-appearance:none;
+    appearance:none;
+    height:34px;
+    padding:0 12px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+    white-space:nowrap;
+    border:1px solid transparent;
+    cursor:pointer;
+    background:#fff;
+  }
+
+  /* 수정 버튼 */
+  .actions .btn-edit{
+    background: #eef2ff !important;
+    color: var(--primary) !important;
+    border-color: #2563eb !important;
+  }
+
+  /* 삭제 버튼 */
+  .actions .btn-del{
+    background: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #2563eb !important;
+  }
+}
+
+/* ===== 사전 리스트 모바일 최적화 ===== */
+@media (max-width: 520px){
+  /* 사전 라벨: 작은 pill */
+  .stage-pre{
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #2563eb;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* 제목: 2줄까지 허용 */
+  .dashItemTitle{
+    font-size: 13px;
+    line-height: 1.25;
+
+    /* 줄 수 제한 (표준 + webkit) */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+
+    display: box;            /* legacy */
+    box-orient: vertical;
+    line-clamp: 2;           /* ✅ 표준 속성 */
+
+    overflow: hidden;
+    white-space: normal;
+  }
+
+  /* 날짜: 오른쪽 정렬 + 줄바꿈 방지 */
+  .dashItemDate{
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 520px){
+  .dashItem{
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    row-gap: 8px;
+  }
+
+  .dashItem > label{
+    grid-column: 1 / 3;
+    grid-row: 1;
+  }
+
+  .dashItem .actions{
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+/* ✅ 모바일(<=480): 셀렉트+수정+삭제+⋯ 한 줄로 예쁘게 */
+@media (max-width: 480px){
+  .actions{
+    display: grid;
+    grid-template-columns: 1fr auto auto 40px; /* select | 수정 | 삭제 | ⋯ */
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* 담당자 select는 한 줄에 포함 (전체폭 X) */
+  .actions .assigneeSelect,
+  .actions select{
+    width: 100%;
+    min-width: 0;               /* grid에서 줄어들 수 있게 */
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  /* 수정/삭제 버튼: 길게 늘리지 말고 짧게 */
+  .actions .btn-edit,
+  .actions .btn-del{
+    width: auto;                /* ✅ 핵심 */
+    min-width: 56px;
+    height: 34px;
+    padding: 0 12px;            /* ✅ 짧게 */
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    justify-content: center;
+  }
+
+  /* ⋯ 버튼 */
+  .actions .btn-more{
+    width: 40px;
+    height: 34px;
+    border-radius: 999px;
+  }
+
+  /* 메뉴 폭은 살짝만 */
+  .moreMenu{
+    right: 0;
+    min-width: 180px;
+  }
+
+  .moreMenu{ min-width: 200px; border-radius: 16px; }
+  .moreItem{ padding: 11px 12px; }
+  .moreLabel{ font-size: 13px; }
+
+  .modal{ padding: 14px; border-radius: 16px; }
+  .modalTitle{ font-size: 16px; }
+  .modalWarn{ font-size: 13px; }
+
+  .doneToggleBtn { font-size:11px; padding:0 8px; height:26px; }
+  .doneHiddenText { font-size:11px; }
+  .phaseBadge { font-size:10px; padding:4px 8px; }
+
+  .progressText {
+    font-size: 11px;     /* 핵심 */
+  }
+}
+
+@media (max-width: 480px){
+  .wsMenu{ left: 0; right: 0; width: 100%; }
+}
+
+/* ====== Actions compact (<=420px) : 짧은 버튼 + 한 줄 배치 ====== */
+@media (max-width: 420px){
+  /* actions 한 줄로 정리 */
+  .dashItem .actions{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  /* 담당자 select 더 컴팩트 */
+  .dashItem .actions .assigneeSelect,
+  .dashItem .actions select{
+    width: 96px !important;
+    max-width: 96px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    border-radius: 999px !important;
+    font-size: 11px !important;
+  }
+
+  /* 수정/삭제 버튼: width 자동 + padding 줄이기 */
+  .dashItem .actions .btn-edit,
+  .dashItem .actions .btn-del{
+    width: auto !important;          /* ✅ 길이 자동 */
+    min-width: 54px !important;      /* ✅ 너무 작지 않게 */
+    height: 30px !important;
+    padding: 0 10px !important;      /* ✅ 짧게 */
+    border-radius: 999px !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  /* 더보기(⋯) 버튼도 같은 톤으로 */
+  .dashItem .actions .btn-more{
+    width: 34px !important;
+    height: 30px !important;
+    border-radius: 999px !important;
+  }
+}
+
+/* ====== 더 작은 화면(<=390)에서 더 컴팩트 ====== */
+@media (max-width: 390px){
+  .dashItem .actions{ gap: 5px !important; }
+
+  .dashItem .actions .assigneeSelect,
+  .dashItem .actions select{
+    width: 88px !important;
+    max-width: 88px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+  }
+
+  .dashItem .actions .btn-edit,
+  .dashItem .actions .btn-del{
+    min-width: 50px !important;
+    height: 28px !important;
+    padding: 0 9px !important;
+    font-size: 11px !important;
+  }
+
+  .dashItem .actions .btn-more{
+    width: 32px !important;
+    height: 28px !important;
+  }
+
+  .phaseBadge { display:none; }
+}
+/* 리스트 전체 폭 제한 (✅ 풀폭으로 변경) */
+.dashList {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;          /* 가운데 정렬 해제 */
+  display: grid;
+  gap: 10px;
+}
+/* ===== 할일 행 미세 분리 ===== */
+.dashItem{
+  padding: 10px 12px;                 /* ✅ 살짝만 여백 */
+  border-bottom: 1px solid #f1f5f9;   /* ✅ 거의 안 보이는 구분선 */
+  transition: background .15s ease;
+}
+
+/* 마지막 줄은 선 제거 (깔끔) */
+.dashItem:last-child{
+  border-bottom: none;
+}
+
+/* hover 시 아주 미세하게 */
+.dashItem:hover{
+  background: rgba(37,99,235,0.03);
+}
+.dashItem{
+  border-radius: 10px;
+}
+.btn-pill {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.btn-pill:hover { background: rgba(59,130,246,0.08); }
+
+.assigneeSelect{
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 800;
+}
