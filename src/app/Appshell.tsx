@@ -37,7 +37,7 @@ export default function AppShell() {
 
           <div className="nav-divider" />
           <div className="nav-section-title">바로가기</div>
-          <a className="nav-external" href="https://youth.posco.com/posco/edu/index.php?mod=academy&pag=aca01#khwhat" target="_blank" rel="noreferrer">
+          <a className="nav-external" href="https://youth.posco.com/posco/_owner/index.php" target="_blank" rel="noreferrer">
             AI ⋅ BigData 홈페이지
           </a>
           <a className="nav-external" href="https://notice-app-f3aa0.web.app/" target="_blank" rel="noreferrer">
