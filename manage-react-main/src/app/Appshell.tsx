@@ -38,12 +38,12 @@ export default function AppShell() {
           <div className="nav-divider" />
           <div className="nav-section-title">바로가기</div>
           <a className="nav-external" href="https://youth.posco.com/posco/_owner/index.php" target="_blank" rel="noreferrer">
-            AI ⋅ BigData 홈페이지
+            AI ⋅ BigData 관리자 페이지
           </a>
           <a className="nav-external" href="https://notice-app-f3aa0.web.app/" target="_blank" rel="noreferrer">
             교육생 공지 대시보드
           </a>
-          <a className="nav-external" href="https://posco.atosoft.kr/worknet/Course/CourseList.asp" target="_blank" rel="noreferrer">
+          <a className="nav-external" href="https://posco.atosoft.kr/worknet/Present/PresentStateList.asp" target="_blank" rel="noreferrer">
             대한상의 LMS(출결)
           </a>
           <a className="nav-external" href="https://attendance-checkin-d1a9b.web.app/admin" target="_blank" rel="noreferrer">
