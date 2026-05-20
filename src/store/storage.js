@@ -55,39 +55,41 @@ export async function saveJSONRemote(uid, key, value) {
     // 동기화 비교는 value 내부 updatedAt(number)를 사용
     await setDoc(ref, { value, updatedAt: Date.now() }, { merge: true });
 }
-
-// ✅ tasks같이 여러 사용자가 동시에 수정 가능한 데이터는 스테일 덮어쓰기 방지
 export async function saveJSONRemoteSafeTasks(uid, key, incoming) {
-  const ref = doc(db, "users", uid, "data", key);
-
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-
-    if (!snap.exists()) {
-      tx.set(ref, { value: incoming, updatedAt: Date.now() }, { merge: true });
-      return;
-    }
-
-    const remoteValue = snap.data()?.value ?? null;
-    const remoteUpdatedAt = typeof remoteValue?.updatedAt === "number" ? remoteValue.updatedAt : 0;
-
-    if (incoming.updatedAt >= remoteUpdatedAt) {
-      tx.set(ref, { value: incoming, updatedAt: Date.now() }, { merge: true });
-      return;
-    }
-
-    const remoteTasks = Array.isArray(remoteValue?.tasks) ? remoteValue.tasks : [];
-    const incomingTasks = Array.isArray(incoming.tasks) ? incoming.tasks : [];
-
-    const byId = new Map();
-    for (const t of remoteTasks) if (t && typeof t.id === "string") byId.set(t.id, t);
-    for (const t of incomingTasks) if (t && typeof t.id === "string") byId.set(t.id, t);
-
-    const merged = {
-      tasks: Array.from(byId.values()),
-      updatedAt: Math.max(remoteUpdatedAt, incoming.updatedAt),
-    };
-
-    tx.set(ref, { value: merged, updatedAt: Date.now() }, { merge: true });
-  });
+    const ref = doc(db, "users", uid, "data", key);
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        // 문서가 없으면 그대로 생성
+        if (!snap.exists()) {
+            tx.set(ref, { value: incoming, updatedAt: Date.now() }, { merge: true });
+            return;
+        }
+        const remoteValue = (snap.data()?.value ?? null);
+        const remoteUpdatedAt = typeof remoteValue?.updatedAt === "number" ? remoteValue.updatedAt : 0;
+        // ✅ 내가 최신(또는 동일)이면: 그대로 저장 (삭제/대량수정 포함)
+        if (incoming.updatedAt >= remoteUpdatedAt) {
+            tx.set(ref, { value: incoming, updatedAt: Date.now() }, { merge: true });
+            return;
+        }
+        // ✅ Remote가 더 최신이면: "덮어쓰기" 금지 → id 기준 병합
+        // - Remote에만 있는 task는 유지(스테일 클라이언트의 실수 삭제 방지)
+        // - Incoming에 있는 task는 Remote를 덮어씀(토글/담당자 변경 반영)
+        const remoteTasks = Array.isArray(remoteValue?.tasks) ? remoteValue.tasks : [];
+        const incomingTasks = Array.isArray(incoming.tasks) ? incoming.tasks : [];
+        const byId = new Map();
+        for (const t of remoteTasks) {
+            if (t && typeof t.id === "string")
+                byId.set(t.id, t);
+        }
+        for (const t of incomingTasks) {
+            if (t && typeof t.id === "string")
+                byId.set(t.id, t);
+        }
+        const mergedTasks = Array.from(byId.values());
+        const merged = {
+            tasks: mergedTasks,
+            updatedAt: Math.max(remoteUpdatedAt, incoming.updatedAt),
+        };
+        tx.set(ref, { value: merged, updatedAt: Date.now() }, { merge: true });
+    });
 }

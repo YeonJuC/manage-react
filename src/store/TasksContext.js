@@ -2,19 +2,11 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
-import { addTask, ensureTemplatesForCohort, loadCohort, loadTasks, saveCohort, saveTasks, } from "./tasks";
-import { materializeTemplatesForCohort, isDismissed, removeCustomTemplate, dismissTemplateForCohort } from "./customTemplates";
+import { addTask, ensureTemplatesForCohort, flushPendingTasks, loadCohort, loadTasks, saveCohort, saveTasks, } from "./tasks";
+import { materializeTemplatesForCohort, isDismissed, removeCustomTemplate, dismissTemplateForCohort, } from "./customTemplates";
 import { cohortDates } from "../data/cohortDates";
+import { loadJSONLocal, saveJSONLocal } from "./storage";
 const TasksCtx = createContext(null);
-function readInitialCommonOwnerUid() {
-    const fromEnv = import.meta.env.VITE_COMMON_OWNER_UID;
-    if (fromEnv && fromEnv.trim())
-        return fromEnv.trim();
-    if (typeof window === "undefined")
-        return null;
-    const fromLS = localStorage.getItem("commonOwnerUid");
-    return fromLS && fromLS.trim() ? fromLS.trim() : null;
-}
 function getOwnerUid(authUid, viewMode, commonOwnerUid) {
     if (!authUid)
         return null;
@@ -25,7 +17,6 @@ function getOwnerUid(authUid, viewMode, commonOwnerUid) {
 function lsKey(base, ownerUid) {
     return ownerUid ? `${base}:${ownerUid}` : base;
 }
-// ✅ 로컬스토리지 키 (ownerUid별로 분리해서 섞임 방지)
 const LS_SEEDED_BASE = "manage-react:seededCohorts";
 function loadSeeded(ownerUid) {
     try {
@@ -39,8 +30,11 @@ function saveSeeded(ownerUid, m) {
     localStorage.setItem(lsKey(LS_SEEDED_BASE, ownerUid), JSON.stringify(m));
 }
 const LS_COHORT_BASE = "manage-react:cohort";
+const LS_COHORT_AT_BASE = "manage-react:cohortUpdatedAt";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
+// ✅ 공용(viewMode=common)에서 "뷰어(내 uid)별" 마지막 선택 차수 저장 키
+const LS_COMMON_VIEW_COHORT = "manage-react:commonViewCohort";
 function parseYmd(s) {
     const [y, m, d] = s.split("-").map(Number);
     return new Date(y, m - 1, d);
@@ -66,8 +60,6 @@ function phaseOf(dueDate, start, end) {
 export function TasksProvider({ children }) {
     const [uid, setUid] = useState(null);
     const [ready, setReady] = useState(false);
-    // ✅ 공용 데이터(특정 상대 1명) UID
-    // 우선순위: (.env) VITE_COMMON_OWNER_UID → localStorage(commonOwnerUid)
     const [commonOwnerUid, setCommonOwnerUidState] = useState(() => {
         const fromEnv = import.meta.env.VITE_COMMON_OWNER_UID ?? undefined;
         const fromLS = typeof window !== "undefined" ? localStorage.getItem("commonOwnerUid") ?? undefined : undefined;
@@ -83,9 +75,7 @@ export function TasksProvider({ children }) {
                     localStorage.setItem("commonOwnerUid", next);
             }
         }
-        catch {
-            // ignore
-        }
+        catch { }
     }, []);
     const LS_VIEWMODE = "manage-react:viewMode";
     const [viewMode, setViewModeState] = useState(() => {
@@ -94,9 +84,7 @@ export function TasksProvider({ children }) {
             if (raw === "mine" || raw === "common")
                 return raw;
         }
-        catch {
-            // ignore
-        }
+        catch { }
         return "mine";
     });
     const setViewMode = useCallback((m) => {
@@ -105,74 +93,26 @@ export function TasksProvider({ children }) {
             if (typeof window !== "undefined")
                 localStorage.setItem(LS_VIEWMODE, m);
         }
-        catch {
-            // ignore
-        }
+        catch { }
     }, []);
-    // ✅ 링크로 접속했을 때 기본 화면: 공용 UID가 설정되어 있고,
-    //    '공용 소유자'가 아닌 사용자는 기본적으로 공용 화면을 먼저 보여줌.
-    //    (단, 사용자가 이미 viewMode를 선택해 저장해둔 경우는 존중)
-    const didAutoPickViewMode = useRef(false);
+    /**
+     * ✅ 중요: 자동으로 common으로 바꾸지 않음
+     * - 공용은 사용자가 버튼/토글로 들어가게 유지
+     */
     useEffect(() => {
-        if (didAutoPickViewMode.current)
-            return;
         if (!ready)
             return;
         if (!uid)
             return;
-        let hasPref = false;
-        try {
-            const raw = typeof window !== "undefined" ? localStorage.getItem(LS_VIEWMODE) : null;
-            hasPref = raw === "mine" || raw === "common";
-        }
-        catch {
-            hasPref = false;
-        }
-        if (hasPref) {
-            didAutoPickViewMode.current = true;
-            return;
-        }
-        if (commonOwnerUid && uid !== commonOwnerUid) {
-            setViewMode("common");
-        }
-        else {
-            setViewMode("mine");
-        }
-        didAutoPickViewMode.current = true;
-    }, [ready, uid, commonOwnerUid, setViewMode]);
+        setViewModeState((prev) => prev ?? "mine");
+    }, [ready, uid]);
     const ownerUid = useMemo(() => getOwnerUid(uid, viewMode, commonOwnerUid), [uid, viewMode, commonOwnerUid]);
-    // ✅ 현재 화면 상태(tasks/cohort)가 어떤 ownerUid 기준인지 추적
-    // (내/공용 토글 시, 이전 ownerUid의 state가 새 ownerUid에 저장되는 사고 방지)
     const [stateOwnerUid, setStateOwnerUid] = useState(null);
-    // ✅ reload 경쟁(race) 방지용 시퀀스
     const reloadSeq = useRef(0);
     const [hydrated, setHydrated] = useState(false);
     const [cohort, setCohort] = useState("");
     const [tasks, setTasks] = useState([]);
-    useEffect(() => {
-        console.log("[TasksStore]", { uid, ownerUid, viewMode, ready, hydrated, cohort, tasksLen: tasks.length });
-    }, [uid, ownerUid, viewMode, ready, hydrated, cohort, tasks]);
-    // ✅ 온라인 복귀 시 자동 reload (다른 기기 변경사항 반영)
-    useEffect(() => {
-        if (!ownerUid)
-            return;
-        const onOnline = () => void reload();
-        window.addEventListener("online", onOnline);
-        return () => window.removeEventListener("online", onOnline);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ownerUid]);
-    // 1) auth 상태
-    useEffect(() => {
-        const unsub = onAuthStateChanged(auth, (u) => {
-            setUid(u?.uid ?? null);
-            setReady(true);
-        });
-        return () => unsub();
-    }, []);
-    // 2) uid/ownerUid/viewMode 바뀌면 로드
     const reload = useCallback(async () => {
-        console.log("[TasksStore][reload] start", { uid, ownerUid, viewMode });
-        // ✅ 이 reload 호출의 고유 번호 (늦게 끝난 이전 호출이 state를 덮어쓰지 않게)
         const seq = ++reloadSeq.current;
         if (!uid || !ownerUid) {
             setTasks([]);
@@ -181,54 +121,98 @@ export function TasksProvider({ children }) {
             return;
         }
         setHydrated(false);
-        const fallbackToLocal = (reason) => {
-            if (reason === "timeout")
-                console.info("[TasksStore][reload] using local cache");
-            else
-                console.warn("[TasksStore][reload] fallback local", reason);
-            setCohort(loadJSON(lsKey(LS_COHORT_BASE, ownerUid), ""));
-            setTasks(loadJSON(lsKey(LS_TASKS_BASE, ownerUid), []));
+        const fallbackToLocal = () => {
+            // ✅ 공용은 뷰어별 cohort 키에서 복원
+            if (viewMode === "common") {
+                setCohort(loadJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), ""));
+            }
+            else {
+                setCohort(loadJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), ""));
+            }
+            setTasks(loadJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), []));
         };
-        // 8초 타임아웃
         const timeout = new Promise((resolve) => setTimeout(() => resolve("timeout"), 8000));
         try {
-            const job = Promise.all([loadCohort(ownerUid), loadTasks(ownerUid)]);
+            // ✅ 공용(common)일 때:
+            // - cohort는 Firestore에서 읽지 않고 "내 uid 기준 로컬"에서만 복원
+            // - tasks는 공용 ownerUid로 Firestore/로컬 동기화 유지
+            const job = viewMode === "common"
+                ? Promise.all([
+                    Promise.resolve(loadJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), "")),
+                    loadTasks(ownerUid),
+                ])
+                : Promise.all([loadCohort(ownerUid), loadTasks(ownerUid)]);
             const res = await Promise.race([job, timeout]);
             if (res === "timeout") {
-                fallbackToLocal("timeout");
+                fallbackToLocal();
                 return;
             }
             const [savedCohort, savedTasks] = res;
             const filteredTasks = (savedTasks ?? []).filter((t) => {
-                // 커스텀 템플릿에서 생성된 task이고
                 if (t.origin === "custom" && t.templateId) {
-                    // 이 기수에서 dismiss된 템플릿이면 제외
                     return !isDismissed(String(savedCohort), t.templateId);
                 }
                 return true;
             });
-            // ✅ ownerUid가 바뀌었는데 늦게 도착한 결과면 무시
             if (seq !== reloadSeq.current)
                 return;
             setCohort(savedCohort ?? "");
             setTasks(filteredTasks);
-            // ✅ cohort는 로컬 갱신(owners별로 분리)
-            saveJSON(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
-            // ⚠️ tasks는 loadTasks()가 이미 "서버/로컬 최신판정 + 로컬 저장"까지 할 수 있으니
-            // 여기서 굳이 saveJSON(LS_KEY, ...)로 다시 덮어쓰지 않는 게 안정적
-            // (필요하면 남겨도 되지만 updatedAt을 같이 맞춰야 함)
+            // ✅ 로컬 캐시 갱신(공용은 뷰어별 키로, 내꺼는 ownerUid 키로)
+            if (viewMode === "common") {
+                saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), savedCohort ?? "");
+            }
+            else {
+                saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), savedCohort ?? "");
+                saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+            }
         }
-        catch (e) {
-            console.warn("[TasksStore][reload] failed -> fallback local", e);
-            fallbackToLocal(e);
+        catch {
+            fallbackToLocal();
         }
         finally {
             if (seq === reloadSeq.current)
                 setHydrated(true);
         }
     }, [uid, ownerUid, viewMode]);
-    // ✅ ownerUid가 바뀌는 순간: 화면 state를 즉시 "미로드" 상태로 돌려놓고
-    // 이전 ownerUid의 tasks/cohort가 새 ownerUid에 저장되는 것을 원천 차단
+    const flushPendingRemoteSave = useCallback(async () => {
+        if (!ownerUid)
+            return;
+        if (!navigator.onLine)
+            return;
+        try {
+            await flushPendingTasks(ownerUid);
+        }
+        catch (e) {
+            console.error("[flushPendingTasks failed]", e);
+        }
+    }, [ownerUid]);
+    useEffect(() => {
+        if (!ownerUid)
+            return;
+        // 앱을 다시 열었을 때, 직전에 원격 저장이 끝나지 않은 일정 저장을 재시도
+        void flushPendingRemoteSave();
+        const onOnline = () => {
+            void flushPendingRemoteSave().then(() => reload());
+        };
+        const onVisible = () => {
+            if (document.visibilityState === "visible")
+                void flushPendingRemoteSave();
+        };
+        window.addEventListener("online", onOnline);
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            window.removeEventListener("online", onOnline);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, [ownerUid, reload, flushPendingRemoteSave]);
+    useEffect(() => {
+        const unsub = onAuthStateChanged(auth, (u) => {
+            setUid(u?.uid ?? null);
+            setReady(true);
+        });
+        return () => unsub();
+    }, []);
     useEffect(() => {
         if (!uid || !ownerUid)
             return;
@@ -239,13 +223,16 @@ export function TasksProvider({ children }) {
         setTasks([]);
         setCohort("");
     }, [uid, ownerUid, stateOwnerUid]);
-    // ✅ uid/ownerUid가 바뀌면 즉시 reload (내/공용 토글 포함)
     useEffect(() => {
         if (!uid || !ownerUid)
             return;
         void reload();
     }, [uid, ownerUid, reload]);
-    // 3) cohort 바뀌면 저장 + 템플릿 보장
+    /**
+     * ✅ cohort가 정해졌을 때:
+     * - mine 모드면 cohort를 원격에 저장 + 템플릿 시딩/커스텀 템플릿 materialize
+     * - common 모드면 "cohort는 로컬(뷰어별)만" 저장
+     */
     useEffect(() => {
         if (!uid || !ownerUid)
             return;
@@ -253,20 +240,18 @@ export function TasksProvider({ children }) {
             return;
         if (!cohort)
             return;
-        // ✅ mine 모드에서는 ownerUid가 반드시 내 uid여야만 실행 (섞임 방지)
         if (viewMode === "mine" && ownerUid !== uid)
             return;
         const ck = cohort;
-        // ✅ 공용 모드에서는 자동 시드/원격 cohort 저장을 하지 않음(실수로 공용 데이터 변형 방지)
         if (viewMode === "common") {
-            saveJSON(lsKey(LS_COHORT_BASE, ownerUid), cohort);
+            // ✅ 공용에서는 cohort를 Firestore에 저장하지 않음(공용 기본값 덮어쓰기 방지)
+            saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), ck);
             return;
         }
         (async () => {
             await saveCohort(ownerUid, ck);
             setTasks((prev) => {
                 let next = prev;
-                // ✅ 기본 템플릿은 "최초 1회만" 시드
                 const seeded = loadSeeded(ownerUid);
                 const seededKey = String(ck);
                 if (!seeded[seededKey]) {
@@ -274,16 +259,13 @@ export function TasksProvider({ children }) {
                     seeded[seededKey] = true;
                     saveSeeded(ownerUid, seeded);
                 }
-                // ✅ 커스텀 템플릿은 매번 반영(중복은 스킵)
                 const toAdd = materializeTemplatesForCohort(ck);
                 const existsTemplateIds = new Set(next.filter((t) => t.templateId).map((t) => t.templateId));
                 for (const it of toAdd) {
                     if (!it.templateId)
                         continue;
-                    // ⭐ 이미 있는 템플릿이면 스킵
                     if (existsTemplateIds.has(it.templateId))
                         continue;
-                    // ⭐ 이 기수에서 삭제된 템플릿이면 스킵
                     if (isDismissed(String(ck), it.templateId))
                         continue;
                     next = addTask(next, {
@@ -297,28 +279,34 @@ export function TasksProvider({ children }) {
                     });
                     existsTemplateIds.add(it.templateId);
                 }
-                // 🔒 여기서는 절대 원격(saveTasks) 호출 금지.
-                // (초기 reload 때 prev가 비어있으면 템플릿 1개로 서버를 덮어쓰는 사고가 발생)
-                // 대신 로컬 캐시만 갱신하고, 실제 원격 저장은 사용자의 변경(setTasksAndSave)에서만 수행.
-                saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
-                saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+                // ✅ 로컬 캐시 갱신 (tasks는 ownerUid 기준)
+                saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
+                saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+                // ✅ 차수 선택 시 자동 생성된 일정도 원격에 저장
+                // 이전에는 로컬에만 남아 새 기기/새 실행에서 빠질 수 있었음
+                if (navigator.onLine) {
+                    void saveTasks(ownerUid, next).catch((e) => console.error("[save seeded tasks failed]", e));
+                }
                 return next;
             });
-            saveJSON(lsKey(LS_COHORT_BASE, ownerUid), ck);
+            // ✅ 내 모드에서는 cohort 로컬도 갱신
+            saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), ck);
+            saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
         })();
     }, [uid, ownerUid, viewMode, hydrated, cohort]);
-    // 4) 수정은 무조건 이 함수로만
+    // ✅ 수정/추가는 무조건 이 함수로만
     const setTasksAndSave = (updater) => {
         setTasks((prev) => {
             const next = updater(prev);
-            // ✅ 오프라인/온라인 모두 로컬 최신화 (ownerUid별로 분리)
             if (ownerUid) {
-                saveJSON(lsKey(LS_TASKS_BASE, ownerUid), next);
-                saveJSON(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+                saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
+                saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
             }
-            // ✅ 온라인이면 서버에도 저장 (공용 모드도 멤버 권한(editor/owner) 있으면 가능)
             if (ownerUid && hydrated && navigator.onLine) {
-                void saveTasks(ownerUid, next);
+                void saveTasks(ownerUid, next).catch((e) => {
+                    console.error("[saveTasks failed]", e);
+                    alert("⚠️ 저장에 실패했습니다. (권한/네트워크 문제)\n새로고침하면 이전 데이터로 돌아갈 수 있어요.\n콘솔 에러를 확인해 주세요.");
+                });
             }
             return next;
         });
@@ -326,27 +314,18 @@ export function TasksProvider({ children }) {
     const bulkUpdateByTemplateId = (templateId, patch) => {
         setTasksAndSave((prev) => prev.map((t) => (t.templateId === templateId ? { ...t, ...patch } : t)));
     };
-    // ✅ 전 기수 일괄 삭제
     const bulkDeleteByTemplateId = (templateId) => {
-        // ✅ 1) 템플릿 자체 삭제(재생성 원천 차단)
         removeCustomTemplate(templateId);
-        // ✅ 2) 32~35 모두 dismiss 기록(혹시 로컬 꼬임/캐시 남아도 재추가 방지)
         Object.keys(cohortDates).forEach((ck) => {
             dismissTemplateForCohort(String(ck), templateId);
         });
-        // ✅ 3) 현재 tasks에서도 전부 제거
         setTasksAndSave((prev) => prev.filter((t) => t.templateId !== templateId));
     };
-    // ✅ 전 기수(32~35)에 템플릿 1개를 즉시 생성 반영
     const applyTemplateToAllCohorts = (tpl) => {
         setTasksAndSave((prev) => {
             let next = prev;
-            // 32~35만 대상: cohortDates에 있는 것만
             const cohortKeys = Object.keys(cohortDates);
-            // 중복 방지: cohort|templateId
-            const exists = new Set(next
-                .filter((t) => t.templateId)
-                .map((t) => `${t.cohort}|${t.templateId}`));
+            const exists = new Set(next.filter((t) => t.templateId).map((t) => `${t.cohort}|${t.templateId}`));
             for (const ck of cohortKeys) {
                 const target = cohortDates[ck];
                 if (!target)
@@ -370,16 +349,25 @@ export function TasksProvider({ children }) {
             return next;
         });
     };
+    /**
+     * ✅ cohort 변경 시:
+     * - mine 모드: ownerUid 기준 로컬 저장 + (온라인) 원격 저장
+     * - common 모드: "내 uid 기준 로컬"에만 저장 (공용 기본값 덮어쓰기 방지)
+     */
     const setCohortAndSave = (nextCohort) => {
         setCohort(nextCohort);
-        if (ownerUid)
-            saveJSON(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
+        if (viewMode === "common") {
+            if (uid)
+                saveJSONLocal(lsKey(LS_COMMON_VIEW_COHORT, uid), nextCohort);
+            return;
+        }
+        if (ownerUid) {
+            saveJSONLocal(lsKey(LS_COHORT_BASE, ownerUid), nextCohort);
+            saveJSONLocal(lsKey(LS_COHORT_AT_BASE, ownerUid), Date.now());
+        }
         if (!uid || !ownerUid || !hydrated)
             return;
         if (!nextCohort)
-            return;
-        // 공용 모드에서는 원격 cohort 저장을 하지 않음
-        if (viewMode === "common")
             return;
         if (navigator.onLine)
             void saveCohort(ownerUid, nextCohort);
@@ -409,27 +397,4 @@ export function useTasksStore() {
     if (!v)
         throw new Error("useTasksStore must be used within TasksProvider");
     return v;
-}
-function loadJSON(key, fallback) {
-    if (typeof window === "undefined")
-        return fallback;
-    try {
-        const raw = localStorage.getItem(key);
-        if (!raw)
-            return fallback;
-        return JSON.parse(raw);
-    }
-    catch {
-        return fallback;
-    }
-}
-function saveJSON(key, value) {
-    if (typeof window === "undefined")
-        return;
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-    }
-    catch {
-        // ignore
-    }
 }

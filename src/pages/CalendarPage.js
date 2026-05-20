@@ -7,6 +7,7 @@ import { addTask, deleteTask, setAssignee, toggleTask } from "../store/tasks";
 import { useTasksStore } from "../store/TasksContext";
 import { cohortDates } from "../data/cohortDates";
 import { getKoreanHolidays } from "../utils/holidays";
+import { dismissTemplateForCohort } from "../store/customTemplates"; // ✅ 추가
 /** 날짜 키: YYYY-MM-DD */
 function ymd(date) {
     return date.toLocaleDateString("sv-SE");
@@ -22,18 +23,13 @@ export default function CalendarPage() {
     const { uid, ready, hydrated, cohort, setCohort, tasks, setTasksAndSave } = useTasksStore();
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [newTitle, setNewTitle] = useState("");
-    // ✅ 추가: 현재 보고 있는 캘린더 월(연도) 기준
     const [activeStartDate, setActiveStartDate] = useState(new Date());
     // 수정 모달
     const [editing, setEditing] = useState(null);
     const [editTitle, setEditTitle] = useState("");
     const [editDate, setEditDate] = useState("");
-    // ✅ 공휴일 state
+    // 공휴일
     const [holidays, setHolidays] = useState([]);
-    useEffect(() => {
-        console.log("[holidays loaded]", holidays.length, holidays.slice(0, 5));
-    }, [holidays]);
-    // ✅ activeStartDate(연도) 바뀌면 공휴일 재조회
     useEffect(() => {
         const y = activeStartDate.getFullYear();
         getKoreanHolidays(y)
@@ -90,6 +86,19 @@ export default function CalendarPage() {
         setTasksAndSave((prev) => prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x)));
         setEditing(null);
     };
+    // ✅ 삭제(템플릿 업무는 dismiss까지 같이)
+    const onDelete = (t) => {
+        if (!cohort)
+            return;
+        const ok = window.confirm("이 할 일을 삭제할까요?");
+        if (!ok)
+            return;
+        // 템플릿에서 생성된 업무면: 다시 생기지 않게 dismiss 처리
+        if (t.templateId) {
+            dismissTemplateForCohort(String(cohort), t.templateId);
+        }
+        setTasksAndSave((prev) => deleteTask(prev, t.id));
+    };
     if (!ready)
         return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB85C\uB529 \uC911\u2026" });
     if (!uid)
@@ -107,10 +116,8 @@ export default function CalendarPage() {
                                 if (view !== "month")
                                     return "";
                                 const classes = [];
-                                // 공휴일 클래스
                                 if (holidayOf(date))
                                     classes.push("holiday");
-                                // 할 일 상태 클래스
                                 const s = getDayStatus(date);
                                 if (s === "done")
                                     classes.push("cal-day-done");
@@ -121,7 +128,6 @@ export default function CalendarPage() {
                                 if (view !== "month")
                                     return null;
                                 const h = holidayOf(date);
-                                const s = getDayStatus(date);
                                 return (_jsx(_Fragment, { children: h && (_jsxs("span", { className: "holiday-dot", children: [h.name, h.substitute ? " (대체)" : ""] })) }));
                             } })) }), _jsxs("div", { className: "card", children: [_jsx("h3", { style: { marginTop: 0 }, children: selectedYmd }), cohort && (() => {
                                 const h = holidayOf(selectedDate);
@@ -141,23 +147,7 @@ export default function CalendarPage() {
                                                 phase,
                                             }));
                                             setNewTitle("");
-                                        }, children: "\uCD94\uAC00" })] })), !cohort && _jsx("div", { style: { color: "var(--muted)" }, children: "\uCC28\uC218\uB97C \uC120\uD0DD\uD558\uBA74 \uC77C\uC815\uC5D0 \uD45C\uC2DC\uB429\uB2C8\uB2E4." }), cohort && dayTasks.length === 0 && (_jsx("div", { style: { color: "var(--muted)", marginLeft: 5, marginTop: 16 }, children: "\uC774 \uB0A0\uC9DC\uC5D0 \uB4F1\uB85D\uB41C \uD560 \uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." })), cohort && dayTasks.length > 0 && (_jsx("div", { style: { display: "grid", gap: 10, marginTop: 10 }, children: dayTasks.map((t) => (_jsxs("div", { className: "card", style: { padding: 12 }, children: [_jsxs("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [_jsxs("label", { style: { display: "flex", gap: 10, alignItems: "center", flex: 1 }, children: [_jsx("input", { type: "checkbox", checked: t.done, onChange: () => setTasksAndSave((prev) => toggleTask(prev, t.id)) }), _jsx("span", { style: { textDecoration: t.done ? "line-through" : "none" }, children: t.title })] }), _jsxs("div", { style: { display: "flex", gap: 8, alignItems: "center" }, className: "actions", children: [_jsxs("select", { value: t.assignee, onChange: (e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value)), style: { height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn-edit", onClick: () => openEdit(t), style: {
-                                                                height: 34,
-                                                                padding: "0 10px",
-                                                                borderRadius: 10,
-                                                                border: "1px solid var(--border)",
-                                                                background: "#fff",
-                                                                cursor: "pointer",
-                                                                fontWeight: 700,
-                                                            }, children: "\uC218\uC815" }), t.id.includes(":custom:") && (_jsx("button", { className: "btn-del", onClick: () => setTasksAndSave((prev) => deleteTask(prev, t.id)), style: {
-                                                                height: 34,
-                                                                padding: "0 10px",
-                                                                borderRadius: 10,
-                                                                border: "1px solid var(--border)",
-                                                                background: "#fff",
-                                                                cursor: "pointer",
-                                                                fontWeight: 700,
-                                                            }, title: "\uC218\uB3D9\uC73C\uB85C \uCD94\uAC00\uD55C \uD560 \uC77C \uC0AD\uC81C", children: "\uC0AD\uC81C" }))] })] }), _jsxs("div", { style: { marginTop: 6, color: "var(--muted)", fontSize: 12 }, children: ["due: ", t.dueDate] })] }, `${t.id}|${t.cohort}|${t.dueDate}`))) }, `${cohort}|${selectedYmd}`)), editing && (_jsx("div", { onClick: () => setEditing(null), style: {
+                                        }, children: "\uCD94\uAC00" })] })), !cohort && _jsx("div", { style: { color: "var(--muted)" }, children: "\uCC28\uC218\uB97C \uC120\uD0DD\uD558\uBA74 \uC77C\uC815\uC5D0 \uD45C\uC2DC\uB429\uB2C8\uB2E4." }), cohort && dayTasks.length === 0 && (_jsx("div", { style: { color: "var(--muted)", marginLeft: 5, marginTop: 16 }, children: "\uC774 \uB0A0\uC9DC\uC5D0 \uB4F1\uB85D\uB41C \uD560 \uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." })), cohort && dayTasks.length > 0 && (_jsx("div", { style: { display: "grid", gap: 10, marginTop: 10 }, children: dayTasks.map((t) => (_jsxs("div", { className: "card", style: { padding: 12 }, children: [_jsxs("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [_jsxs("label", { style: { display: "flex", gap: 10, alignItems: "center", flex: 1 }, children: [_jsx("input", { type: "checkbox", checked: t.done, onChange: () => setTasksAndSave((prev) => toggleTask(prev, t.id)) }), _jsx("span", { style: { textDecoration: t.done ? "line-through" : "none" }, children: t.title })] }), _jsxs("div", { style: { display: "flex", gap: 8, alignItems: "center" }, className: "actions", children: [_jsxs("select", { value: t.assignee, onChange: (e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value)), style: { height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn-edit", onClick: () => openEdit(t), children: "\uC218\uC815" }), _jsx("button", { className: "btn-del", onClick: () => onDelete(t), title: "\uD560 \uC77C \uC0AD\uC81C", children: "\uC0AD\uC81C" })] })] }), _jsxs("div", { style: { marginTop: 6, color: "var(--muted)", fontSize: 12 }, children: ["due: ", t.dueDate] })] }, `${t.id}|${t.cohort}|${t.dueDate}`))) }, `${cohort}|${selectedYmd}`)), editing && (_jsx("div", { onClick: () => setEditing(null), style: {
                                     position: "fixed",
                                     inset: 0,
                                     background: "rgba(0,0,0,0.35)",
@@ -181,5 +171,5 @@ export default function CalendarPage() {
                                                                 padding: "0 12px",
                                                                 borderRadius: 10,
                                                                 border: "1px solid var(--border)",
-                                                            } })] }), _jsxs("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }, children: [_jsx("button", { className: "btn", onClick: () => setEditing(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn", onClick: saveEdit, children: "\uC800\uC7A5" })] })] })] }) }))] })] })] }));
+                                                            } })] }), _jsxs("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }, children: [_jsx("button", { className: "btn btn--ghost", onClick: () => setEditing(null), children: "\uCDE8\uC18C" }), _jsx("button", { className: "btn", onClick: saveEdit, children: "\uC800\uC7A5" })] })] })] }) }))] })] })] }));
 }

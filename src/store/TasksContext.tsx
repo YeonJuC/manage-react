@@ -5,6 +5,7 @@ import type { CohortKey } from "../data/templates";
 import {
   addTask,
   ensureTemplatesForCohort,
+  flushPendingTasks,
   loadCohort,
   loadTasks,
   saveCohort,
@@ -234,12 +235,39 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
   }, [uid, ownerUid, viewMode]);
 
+  const flushPendingRemoteSave = useCallback(async () => {
+    if (!ownerUid) return;
+    if (!navigator.onLine) return;
+
+    try {
+      await flushPendingTasks(ownerUid);
+    } catch (e) {
+      console.error("[flushPendingTasks failed]", e);
+    }
+  }, [ownerUid]);
+
   useEffect(() => {
     if (!ownerUid) return;
-    const onOnline = () => void reload();
+
+    // 앱을 다시 열었을 때, 직전에 원격 저장이 끝나지 않은 일정 저장을 재시도
+    void flushPendingRemoteSave();
+
+    const onOnline = () => {
+      void flushPendingRemoteSave().then(() => reload());
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void flushPendingRemoteSave();
+    };
+
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
-  }, [ownerUid, reload]);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [ownerUid, reload, flushPendingRemoteSave]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -322,6 +350,13 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         // ✅ 로컬 캐시 갱신 (tasks는 ownerUid 기준)
         saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
         saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
+
+        // ✅ 차수 선택 시 자동 생성된 일정도 원격에 저장
+        // 이전에는 로컬에만 남아 새 기기/새 실행에서 빠질 수 있었음
+        if (navigator.onLine) {
+          void saveTasks(ownerUid, next).catch((e) => console.error("[save seeded tasks failed]", e));
+        }
+
         return next;
       });
 

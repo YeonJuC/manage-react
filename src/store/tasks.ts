@@ -41,6 +41,7 @@ const LS_KEY_BASE = "manage-react:tasks";
 const LS_COHORT_BASE = "manage-react:cohort";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
 const LS_COHORT_AT_BASE = "manage-react:cohortUpdatedAt";
+const LS_TASKS_PENDING_BASE = "manage-react:tasksPendingRemoteSave";
 
 function lsKey(base: string, ownerUid: string) {
   return `${base}:${ownerUid}`;
@@ -106,6 +107,7 @@ export async function saveCohort(uid: string, cohort: CohortKey) {
 export async function loadTasks(uid: string): Promise<Task[]> {
   const localTasks = loadJSONLocal<Task[]>(lsKey(LS_KEY_BASE, uid), []);
   const localUpdatedAt = loadJSONLocal<number>(lsKey(LS_TASKS_AT_BASE, uid), 0);
+  const hasPendingRemoteSave = loadJSONLocal<boolean>(lsKey(LS_TASKS_PENDING_BASE, uid), false);
 
   const remoteRaw = await loadJSONRemote<TasksPayload | Task[]>(uid, LS_KEY_BASE);
 
@@ -124,6 +126,13 @@ export async function loadTasks(uid: string): Promise<Task[]> {
 
   const remoteTasks = remotePayload.tasks ?? [];
   const remoteUpdatedAt = remotePayload.updatedAt ?? 0;
+
+  // ✅ 직전 수정사항이 원격 저장 전에 끊겼다면 로컬을 우선 사용
+  // - 브라우저/앱을 바로 닫아도 다음 실행 때 사용자가 방금 수정한 일정이 사라지지 않게 함
+  // - 원격 저장은 TasksProvider의 flushPendingTasks에서 재시도
+  if (hasPendingRemoteSave && localTasks.length > 0) {
+    return localTasks;
+  }
 
   // Remote가 비어있으면 → Local 사용
   if (remoteTasks.length === 0) {
@@ -161,11 +170,36 @@ export async function saveTasks(uid: string, tasks: Task[]) {
   saveJSONLocal(lsKey(LS_KEY_BASE, uid), cleaned);
   saveJSONLocal(lsKey(LS_TASKS_AT_BASE, uid), updatedAt);
 
+  // ✅ 원격 저장 전 pending 표시
+  // 앱/브라우저를 바로 닫거나 네트워크가 끊겨도 다음 실행 때 재시도할 수 있게 함
+  saveJSONLocal(lsKey(LS_TASKS_PENDING_BASE, uid), true);
+
   // ✅ 원격 저장 (payload)
   await saveJSONRemoteSafeTasks(uid, LS_KEY_BASE, {
     tasks: cleaned,
     updatedAt,
   } satisfies TasksPayload);
+
+  // ✅ 성공했을 때만 pending 해제
+  saveJSONLocal(lsKey(LS_TASKS_PENDING_BASE, uid), false);
+}
+
+export function hasPendingTasksSave(uid: string): boolean {
+  return loadJSONLocal<boolean>(lsKey(LS_TASKS_PENDING_BASE, uid), false);
+}
+
+export async function flushPendingTasks(uid: string) {
+  if (!hasPendingTasksSave(uid)) return;
+
+  const localTasks = loadJSONLocal<Task[]>(lsKey(LS_KEY_BASE, uid), []);
+  const localUpdatedAt = loadJSONLocal<number>(lsKey(LS_TASKS_AT_BASE, uid), 0);
+
+  await saveJSONRemoteSafeTasks(uid, LS_KEY_BASE, {
+    tasks: localTasks,
+    updatedAt: localUpdatedAt || Date.now(),
+  } satisfies TasksPayload);
+
+  saveJSONLocal(lsKey(LS_TASKS_PENDING_BASE, uid), false);
 }
 
 function formatYMD(d: Date) {
