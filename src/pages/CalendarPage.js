@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { cohorts } from "../data/templates";
-import { addTask, deleteTask, setAssignee, toggleTask } from "../store/tasks";
+import { addTask, deleteTask, getTaskTemplateId, setAssignee, toggleTask } from "../store/tasks";
 import { useTasksStore } from "../store/TasksContext";
 import { cohortDates } from "../data/cohortDates";
 import { getKoreanHolidays } from "../utils/holidays";
-import { dismissTemplateForCohort } from "../store/customTemplates"; // ✅ 추가
+import { dismissTemplateForAllCohorts } from "../store/customTemplates";
 /** 날짜 키: YYYY-MM-DD */
 function ymd(date) {
     return date.toLocaleDateString("sv-SE");
@@ -86,16 +86,20 @@ export default function CalendarPage() {
         setTasksAndSave((prev) => prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x)));
         setEditing(null);
     };
-    // ✅ 삭제(템플릿 업무는 dismiss까지 같이)
+    // ✅ 삭제: 기본/반복 템플릿 일정은 다음 기수에도 안 나오도록 전체 차수 공통 삭제
     const onDelete = (t) => {
         if (!cohort)
             return;
-        const ok = window.confirm("이 할 일을 삭제할까요?");
+        const templateId = getTaskTemplateId(t);
+        const ok = window.confirm(templateId
+            ? "이 반복 일정을 삭제할까요?\n삭제하면 32~35기 전체에서 같은 일정이 제거되고, 다음 기수에도 다시 생성되지 않습니다."
+            : "이 할 일을 삭제할까요?");
         if (!ok)
             return;
-        // 템플릿에서 생성된 업무면: 다시 생기지 않게 dismiss 처리
-        if (t.templateId) {
-            dismissTemplateForCohort(String(cohort), t.templateId);
+        if (templateId) {
+            dismissTemplateForAllCohorts(templateId);
+            setTasksAndSave((prev) => prev.filter((x) => getTaskTemplateId(x) !== templateId));
+            return;
         }
         setTasksAndSave((prev) => deleteTask(prev, t.id));
     };

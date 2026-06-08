@@ -1,6 +1,7 @@
 import { loadJSONLocal, saveJSONLocal, loadJSONRemote, saveJSONRemote, saveJSONRemoteSafeTasks, } from "./storage";
 import * as Templates from "../data/templates";
 import { schedules } from "../data/schedule";
+import { isDismissed } from "./customTemplates";
 const taskTemplates = (Templates.taskTemplates ?? []);
 const LS_KEY_BASE = "manage-react:tasks";
 const LS_COHORT_BASE = "manage-react:cohort";
@@ -159,6 +160,13 @@ function phaseFromDueDate(cohort, dueDate) {
         return "post";
     return "during";
 }
+export function getTaskTemplateId(task) {
+    if (task.templateId)
+        return task.templateId;
+    // ✅ 예전 저장 데이터 호환: 기본 일정 id 형태가 "32:템플릿키:YYYY-MM-DD"였음
+    const m = String(task.id ?? "").match(/^(32|33|34|35):([^:]+):\d{4}-\d{2}-\d{2}$/);
+    return m ? `base:${m[2]}` : undefined;
+}
 export function ensureTemplatesForCohort(tasks, cohort) {
     const sched = schedules[cohort];
     if (!sched)
@@ -166,12 +174,14 @@ export function ensureTemplatesForCohort(tasks, cohort) {
     const existingIds = new Set(tasks.filter((t) => t.cohort === cohort).map((t) => t.id));
     const now = Date.now();
     const toAdd = taskTemplates
+        .filter((tpl) => !isDismissed(String(cohort), `base:${tpl.key}`))
         .map((tpl) => {
         const anchor = tpl.anchor;
         const base = sched[anchor];
         if (!base)
             return null;
         const dueDate = addDays(base, tpl.offsetDays);
+        const templateId = `base:${tpl.key}`;
         const id = `${cohort}:${tpl.key}:${dueDate}`;
         return {
             id,
@@ -182,6 +192,8 @@ export function ensureTemplatesForCohort(tasks, cohort) {
             assignee: tpl.defaultAssignee ?? "",
             done: false,
             createdAt: now,
+            templateId,
+            origin: "seed",
         };
     })
         .filter((t) => !!t)

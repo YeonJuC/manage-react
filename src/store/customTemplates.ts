@@ -17,6 +17,7 @@ export type CustomTemplate = {
 const LS_CUSTOM_TPL = "pab_custom_templates_v1";
 const LS_DISMISSED = "pab_custom_templates_dismissed_v1";
 type DismissedMap = Record<string, string[]>;
+const GLOBAL_DISMISSED_KEY = "__all__";
 
 function loadDismissed(): DismissedMap {
   try {
@@ -37,9 +38,18 @@ export function dismissTemplateForCohort(cohortKey: string, templateId: string) 
   saveDismissed(m);
 }
 
+// ✅ 한 기수에서 삭제한 반복/기본 일정은 다른 기수에도 다시 생성되지 않게 공통 삭제 처리
+export function dismissTemplateForAllCohorts(templateId: string) {
+  const m = loadDismissed();
+  const set = new Set(m[GLOBAL_DISMISSED_KEY] ?? []);
+  set.add(templateId);
+  m[GLOBAL_DISMISSED_KEY] = [...set];
+  saveDismissed(m);
+}
+
 export function isDismissed(cohortKey: string, templateId: string) {
   const m = loadDismissed();
-  return (m[cohortKey] ?? []).includes(templateId);
+  return (m[GLOBAL_DISMISSED_KEY] ?? []).includes(templateId) || (m[cohortKey] ?? []).includes(templateId);
 }
 
 function parseYmd(s: string) {

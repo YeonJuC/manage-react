@@ -9,6 +9,7 @@ import type { CohortKey } from "../data/templates";
 import * as Templates from "../data/templates";
 import { schedules } from "../data/schedule";
 import type { CohortSchedule } from "../data/schedule";
+import { isDismissed } from "./customTemplates";
 
 const taskTemplates = ((Templates as any).taskTemplates ?? []) as any[];
 
@@ -225,6 +226,14 @@ function phaseFromDueDate(cohort: CohortKey, dueDate: string): Phase {
   return "during";
 }
 
+export function getTaskTemplateId(task: Pick<Task, "id" | "templateId">): string | undefined {
+  if (task.templateId) return task.templateId;
+
+  // ✅ 예전 저장 데이터 호환: 기본 일정 id 형태가 "32:템플릿키:YYYY-MM-DD"였음
+  const m = String(task.id ?? "").match(/^(32|33|34|35):([^:]+):\d{4}-\d{2}-\d{2}$/);
+  return m ? `base:${m[2]}` : undefined;
+}
+
 export function ensureTemplatesForCohort(tasks: Task[], cohort: CohortKey): Task[] {
   const sched = schedules[cohort];
   if (!sched) return tasks;
@@ -233,12 +242,14 @@ export function ensureTemplatesForCohort(tasks: Task[], cohort: CohortKey): Task
   const now = Date.now();
 
   const toAdd: Task[] = taskTemplates
+    .filter((tpl: any) => !isDismissed(String(cohort), `base:${tpl.key}`))
     .map((tpl: any) => {
       const anchor = tpl.anchor as keyof CohortSchedule;
       const base = (sched as any)[anchor] as string | undefined;
       if (!base) return null;
 
       const dueDate = addDays(base, tpl.offsetDays);
+      const templateId = `base:${tpl.key}`;
       const id = `${cohort}:${tpl.key}:${dueDate}`;
 
       return {
@@ -250,6 +261,8 @@ export function ensureTemplatesForCohort(tasks: Task[], cohort: CohortKey): Task
         assignee: tpl.defaultAssignee ?? "",
         done: false,
         createdAt: now,
+        templateId,
+        origin: "seed",
       } as Task;
     })
     .filter((t): t is Task => !!t)

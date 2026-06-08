@@ -5,6 +5,7 @@ import type { CohortKey } from "../data/templates";
 import {
   addTask,
   ensureTemplatesForCohort,
+  getTaskTemplateId,
   flushPendingTasks,
   loadCohort,
   loadTasks,
@@ -210,10 +211,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       const [savedCohort, savedTasks] = res;
 
       const filteredTasks = (savedTasks ?? []).filter((t) => {
-        if (t.origin === "custom" && t.templateId) {
-          return !isDismissed(String(savedCohort), t.templateId);
-        }
-        return true;
+        const templateId = getTaskTemplateId(t);
+        return templateId ? !isDismissed(String(savedCohort), templateId) : true;
       });
 
       if (seq !== reloadSeq.current) return;

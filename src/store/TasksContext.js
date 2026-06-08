@@ -2,7 +2,7 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
-import { addTask, ensureTemplatesForCohort, flushPendingTasks, loadCohort, loadTasks, saveCohort, saveTasks, } from "./tasks";
+import { addTask, ensureTemplatesForCohort, getTaskTemplateId, flushPendingTasks, loadCohort, loadTasks, saveCohort, saveTasks, } from "./tasks";
 import { materializeTemplatesForCohort, isDismissed, removeCustomTemplate, dismissTemplateForCohort, } from "./customTemplates";
 import { cohortDates } from "../data/cohortDates";
 import { loadJSONLocal, saveJSONLocal } from "./storage";
@@ -149,10 +149,8 @@ export function TasksProvider({ children }) {
             }
             const [savedCohort, savedTasks] = res;
             const filteredTasks = (savedTasks ?? []).filter((t) => {
-                if (t.origin === "custom" && t.templateId) {
-                    return !isDismissed(String(savedCohort), t.templateId);
-                }
-                return true;
+                const templateId = getTaskTemplateId(t);
+                return templateId ? !isDismissed(String(savedCohort), templateId) : true;
             });
             if (seq !== reloadSeq.current)
                 return;
