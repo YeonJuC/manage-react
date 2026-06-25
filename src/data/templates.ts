@@ -17,3 +17,5 @@ export const cohorts: { key: CohortKey; label: string }[] = [
   { key: "35", label: "35기(4차)" },
 ];
 
+
+export const taskTemplates = [];

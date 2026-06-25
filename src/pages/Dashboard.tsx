@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { cohorts, type CohortKey } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
 import type { Task } from "../store/tasks";
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { addTask } from "../store/tasks";
+import SaveToast, { type SaveToastState, type SaveToastType } from "../components/SaveToast";
 
 function labelPhase(p: Task["phase"]) {
   if (p === "pre") return "사전";
@@ -93,12 +94,35 @@ export default function Dashboard() {
   const [newDueDate, setNewDueDate] = useState(todayYmd);
   const [newPhase, setNewPhase] = useState<Task["phase"]>("during");
 
-  const onAddFromDash = () => {
-    if (!uid) return;
-    if (!cohort) return;
-    if (!newTitle.trim()) return;
+  const [saveNotice, setSaveNotice] = useState<SaveToastState>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const showSaveNotice = (type: SaveToastType, text: string) => {
+    setSaveNotice({ type, text });
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 3000);
+  };
 
-    setTasksAndSave((prev) =>
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
+  const onAddFromDash = async () => {
+    if (!uid) {
+      showSaveNotice("error", "로그인 후 할 일을 등록할 수 있습니다.");
+      return;
+    }
+    if (!cohort) {
+      showSaveNotice("error", "차수를 먼저 선택해 주세요.");
+      return;
+    }
+    if (!newTitle.trim()) {
+      showSaveNotice("error", "할 일 내용을 입력해 주세요.");
+      return;
+    }
+
+    const result = await setTasksAndSave((prev) =>
       addTask(prev, {
         cohort,
         title: newTitle.trim(),
@@ -109,6 +133,14 @@ export default function Dashboard() {
     );
 
     setNewTitle("");
+
+    if (result === "remote") {
+      showSaveNotice("success", "할 일이 저장되었습니다.");
+    } else if (result === "local") {
+      showSaveNotice("warning", "할 일이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.");
+    } else {
+      showSaveNotice("error", "저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+    }
   };
 
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;

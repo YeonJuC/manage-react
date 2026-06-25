@@ -12,6 +12,7 @@ import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
 import { useTasksStore } from "../store/TasksContext";
 import { materializeTemplatesForCohort } from "../store/customTemplates";
+import SaveToast from "../components/SaveToast";
 
 const phaseLabel: Record<Phase, string> = {
   pre: "사전",
@@ -93,7 +94,7 @@ export default function Tasks() {
   const showSaveNotice = (type: "success" | "warning" | "error", text: string) => {
     setSaveNotice({ type, text });
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 2400);
+    noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 3000);
   };
 
   useEffect(() => {
@@ -190,7 +191,7 @@ export default function Tasks() {
     setEditPhase(t.phase);
   };
 
-  const onEditSave = () => {
+  const onEditSave = async () => {
     if (!editing) return;
     const title = editTitle.trim();
     const dueDate = editDate.trim();
@@ -199,7 +200,7 @@ export default function Tasks() {
     const target = cohortDates[editing.cohort as CohortKey];
     const phase = target ? phaseOf(dueDate, target.start, target.end) : editPhase;
 
-    setTasksAndSave((prev) => {
+    const result = await setTasksAndSave((prev) => {
       const idx = prev.findIndex((x) => x.id === editing.id);
       if (idx < 0) return prev;
       const copy = [...prev];
@@ -208,6 +209,14 @@ export default function Tasks() {
     });
 
     setEditing(null);
+
+    if (result === "remote") {
+      showSaveNotice("success", "수정한 할 일이 저장되었습니다.");
+    } else if (result === "local") {
+      showSaveNotice("warning", "수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.");
+    } else {
+      showSaveNotice("error", "수정 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+    }
   };
 
   const onDelete = (id: string) => {
@@ -530,15 +539,7 @@ export default function Tasks() {
 
   return (
     <div>
-      {saveNotice && (
-        <div
-          className={`saveToast saveToast--${saveNotice.type}`}
-          role="status"
-          aria-live="polite"
-        >
-          {saveNotice.text}
-        </div>
-      )}
+      <SaveToast toast={saveNotice} />
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>할 일</h2>

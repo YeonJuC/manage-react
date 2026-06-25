@@ -6,6 +6,7 @@ import { seedTasks32 } from "../data/seedTasks32";
 import { cohortDates } from "../data/cohortDates";
 import { useTasksStore } from "../store/TasksContext";
 import { materializeTemplatesForCohort } from "../store/customTemplates";
+import SaveToast from "../components/SaveToast";
 const phaseLabel = {
     pre: "사전",
     during: "교육 중",
@@ -70,7 +71,7 @@ export default function Tasks() {
         setSaveNotice({ type, text });
         if (noticeTimerRef.current)
             window.clearTimeout(noticeTimerRef.current);
-        noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 2400);
+        noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 3000);
     };
     useEffect(() => {
         return () => {
@@ -151,7 +152,7 @@ export default function Tasks() {
         setEditDate(t.dueDate);
         setEditPhase(t.phase);
     };
-    const onEditSave = () => {
+    const onEditSave = async () => {
         if (!editing)
             return;
         const title = editTitle.trim();
@@ -160,7 +161,7 @@ export default function Tasks() {
             return;
         const target = cohortDates[editing.cohort];
         const phase = target ? phaseOf(dueDate, target.start, target.end) : editPhase;
-        setTasksAndSave((prev) => {
+        const result = await setTasksAndSave((prev) => {
             const idx = prev.findIndex((x) => x.id === editing.id);
             if (idx < 0)
                 return prev;
@@ -169,6 +170,15 @@ export default function Tasks() {
             return copy;
         });
         setEditing(null);
+        if (result === "remote") {
+            showSaveNotice("success", "수정한 할 일이 저장되었습니다.");
+        }
+        else if (result === "local") {
+            showSaveNotice("warning", "수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.");
+        }
+        else {
+            showSaveNotice("error", "수정 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+        }
     };
     const onDelete = (id) => {
         if (!window.confirm("삭제할까요?"))
@@ -352,5 +362,5 @@ export default function Tasks() {
     };
     if (!ready)
         return _jsx("div", { style: { padding: 16 }, children: "\uB85C\uB529\uC911..." });
-    return (_jsxs("div", { children: [saveNotice && (_jsx("div", { className: `saveToast saveToast--${saveNotice.type}`, role: "status", "aria-live": "polite", children: saveNotice.text })), _jsxs("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }, children: [_jsx("h2", { style: { margin: 0 }, children: "\uD560 \uC77C" }), _jsxs("select", { value: cohort ?? "", onChange: (e) => setCohort(e.target.value), style: { height: 40, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", disabled: true, children: "\uCC28\uC218 \uC120\uD0DD" }), cohorts.map((c) => (_jsx("option", { value: c.key, children: c.label }, c.key)))] }), _jsx("button", { type: "button", className: "btn", onClick: onAdd, children: "+ \uCD94\uAC00" }), _jsx("button", { type: "button", className: "btn btn--ghost", onClick: onBulkSeed, children: "\uC5C5\uBB34 \uC77C\uAD04 \uB4F1\uB85D" }), _jsx("div", { style: { flex: 1 } }), _jsx("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "\uAC80\uC0C9(\uC5C5\uBB34/\uB2F4\uB2F9\uC790)", style: { height: 40, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)" } })] }), _jsxs("div", { style: { marginTop: 10, color: "var(--muted)", fontSize: 13 }, children: ["\uCD1D ", total, "\uAC1C \u00B7 \uC644\uB8CC ", doneCount, "\uAC1C"] }), _jsxs("div", { style: { marginTop: 10 }, children: [_jsx(PhaseSection, { phase: "pre" }), _jsx(PhaseSection, { phase: "during" }), _jsx(PhaseSection, { phase: "post" })] }), editing && (_jsx("div", { className: "modalOverlay", onClick: () => setEditing(null), children: _jsxs("div", { className: "modal", onClick: (e) => e.stopPropagation(), children: [_jsx("h3", { style: { margin: 0 }, children: "\uC5C5\uBB34 \uC218\uC815" }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uC5C5\uBB34\uBA85" }), _jsx("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), placeholder: "\uC5C5\uBB34\uBA85" })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uAE30\uD55C" }), _jsx("input", { value: editDate, onChange: (e) => setEditDate(e.target.value), placeholder: "YYYY-MM-DD" })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uAD6C\uAC04" }), _jsxs("select", { value: editPhase, onChange: (e) => setEditPhase(e.target.value), children: [_jsx("option", { value: "pre", children: "\uC0AC\uC804" }), _jsx("option", { value: "during", children: "\uAD50\uC721 \uC911" }), _jsx("option", { value: "post", children: "\uC0AC\uD6C4" })] })] }), _jsxs("div", { className: "modalActions", children: [_jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => setEditing(null), children: "\uCDE8\uC18C" }), _jsx("button", { type: "button", className: "btn", onClick: onEditSave, children: "\uC800\uC7A5" })] })] }) }))] }));
+    return (_jsxs("div", { children: [_jsx(SaveToast, { toast: saveNotice }), _jsxs("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }, children: [_jsx("h2", { style: { margin: 0 }, children: "\uD560 \uC77C" }), _jsxs("select", { value: cohort ?? "", onChange: (e) => setCohort(e.target.value), style: { height: 40, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", disabled: true, children: "\uCC28\uC218 \uC120\uD0DD" }), cohorts.map((c) => (_jsx("option", { value: c.key, children: c.label }, c.key)))] }), _jsx("button", { type: "button", className: "btn", onClick: onAdd, children: "+ \uCD94\uAC00" }), _jsx("button", { type: "button", className: "btn btn--ghost", onClick: onBulkSeed, children: "\uC5C5\uBB34 \uC77C\uAD04 \uB4F1\uB85D" }), _jsx("div", { style: { flex: 1 } }), _jsx("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "\uAC80\uC0C9(\uC5C5\uBB34/\uB2F4\uB2F9\uC790)", style: { height: 40, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)" } })] }), _jsxs("div", { style: { marginTop: 10, color: "var(--muted)", fontSize: 13 }, children: ["\uCD1D ", total, "\uAC1C \u00B7 \uC644\uB8CC ", doneCount, "\uAC1C"] }), _jsxs("div", { style: { marginTop: 10 }, children: [_jsx(PhaseSection, { phase: "pre" }), _jsx(PhaseSection, { phase: "during" }), _jsx(PhaseSection, { phase: "post" })] }), editing && (_jsx("div", { className: "modalOverlay", onClick: () => setEditing(null), children: _jsxs("div", { className: "modal", onClick: (e) => e.stopPropagation(), children: [_jsx("h3", { style: { margin: 0 }, children: "\uC5C5\uBB34 \uC218\uC815" }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uC5C5\uBB34\uBA85" }), _jsx("input", { value: editTitle, onChange: (e) => setEditTitle(e.target.value), placeholder: "\uC5C5\uBB34\uBA85" })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uAE30\uD55C" }), _jsx("input", { value: editDate, onChange: (e) => setEditDate(e.target.value), placeholder: "YYYY-MM-DD" })] }), _jsxs("div", { className: "modalField", children: [_jsx("label", { children: "\uAD6C\uAC04" }), _jsxs("select", { value: editPhase, onChange: (e) => setEditPhase(e.target.value), children: [_jsx("option", { value: "pre", children: "\uC0AC\uC804" }), _jsx("option", { value: "during", children: "\uAD50\uC721 \uC911" }), _jsx("option", { value: "post", children: "\uC0AC\uD6C4" })] })] }), _jsxs("div", { className: "modalActions", children: [_jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => setEditing(null), children: "\uCDE8\uC18C" }), _jsx("button", { type: "button", className: "btn", onClick: onEditSave, children: "\uC800\uC7A5" })] })] }) }))] }));
 }

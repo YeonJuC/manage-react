@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { cohorts } from "../data/templates";
 import { useTasksStore } from "../store/TasksContext";
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { addTask } from "../store/tasks";
 function labelPhase(p) {
     if (p === "pre")
@@ -66,14 +66,34 @@ export default function Dashboard() {
     const [newTitle, setNewTitle] = useState("");
     const [newDueDate, setNewDueDate] = useState(todayYmd);
     const [newPhase, setNewPhase] = useState("during");
-    const onAddFromDash = () => {
-        if (!uid)
+    const [saveNotice, setSaveNotice] = useState(null);
+    const noticeTimerRef = useRef(null);
+    const showSaveNotice = (type, text) => {
+        setSaveNotice({ type, text });
+        if (noticeTimerRef.current)
+            window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 3000);
+    };
+    useEffect(() => {
+        return () => {
+            if (noticeTimerRef.current)
+                window.clearTimeout(noticeTimerRef.current);
+        };
+    }, []);
+    const onAddFromDash = async () => {
+        if (!uid) {
+            showSaveNotice("error", "로그인 후 할 일을 등록할 수 있습니다.");
             return;
-        if (!cohort)
+        }
+        if (!cohort) {
+            showSaveNotice("error", "차수를 먼저 선택해 주세요.");
             return;
-        if (!newTitle.trim())
+        }
+        if (!newTitle.trim()) {
+            showSaveNotice("error", "할 일 내용을 입력해 주세요.");
             return;
-        setTasksAndSave((prev) => addTask(prev, {
+        }
+        const result = await setTasksAndSave((prev) => addTask(prev, {
             cohort,
             title: newTitle.trim(),
             dueDate: newDueDate,
@@ -81,6 +101,15 @@ export default function Dashboard() {
             assignee: "",
         }));
         setNewTitle("");
+        if (result === "remote") {
+            showSaveNotice("success", "할 일이 저장되었습니다.");
+        }
+        else if (result === "local") {
+            showSaveNotice("warning", "할 일이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.");
+        }
+        else {
+            showSaveNotice("error", "저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+        }
     };
     if (!ready)
         return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB85C\uB529 \uC911\u2026" });

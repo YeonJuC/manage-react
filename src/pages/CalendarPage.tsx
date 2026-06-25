@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { cohorts, type CohortKey } from "../data/templates";
@@ -7,6 +7,7 @@ import { useTasksStore } from "../store/TasksContext";
 import { cohortDates } from "../data/cohortDates";
 import { getKoreanHolidays, type KRHoliday } from "../utils/holidays";
 import { dismissTemplateForAllCohorts } from "../store/customTemplates";
+import SaveToast, { type SaveToastState, type SaveToastType } from "../components/SaveToast";
 
 /** 날짜 키: YYYY-MM-DD */
 function ymd(date: Date) {
@@ -24,6 +25,20 @@ export default function CalendarPage() {
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [newTitle, setNewTitle] = useState("");
+
+  const [saveNotice, setSaveNotice] = useState<SaveToastState>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const showSaveNotice = (type: SaveToastType, text: string) => {
+    setSaveNotice({ type, text });
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
 
   const [activeStartDate, setActiveStartDate] = useState<Date>(new Date());
 
@@ -125,6 +140,7 @@ export default function CalendarPage() {
 
   return (
     <div>
+      <SaveToast toast={saveNotice} />
       <h1>캘린더</h1>
 
       <div className="card" style={{ marginTop: 12 }}>
@@ -214,7 +230,7 @@ export default function CalendarPage() {
 
               <button
                 className="btn"
-                onClick={() => {
+                onClick={async () => {
                   const title = newTitle.trim();
                   if (!title) return;
                   if (!cohort) return;
@@ -222,7 +238,7 @@ export default function CalendarPage() {
                   const range = cohortDates[cohort as CohortKey];
                   const phase = range ? phaseOf(selectedYmd, range.start, range.end) : "during";
 
-                  setTasksAndSave((prev) =>
+                  const result = await setTasksAndSave((prev) =>
                     addTask(prev, {
                       cohort: cohort as CohortKey,
                       title,
@@ -232,6 +248,14 @@ export default function CalendarPage() {
                   );
 
                   setNewTitle("");
+
+                  if (result === "remote") {
+                    showSaveNotice("success", "할 일이 저장되었습니다.");
+                  } else if (result === "local") {
+                    showSaveNotice("warning", "할 일이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.");
+                  } else {
+                    showSaveNotice("error", "저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+                  }
                 }}
               >
                 추가
