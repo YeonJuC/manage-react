@@ -180,19 +180,33 @@ export default function Tasks() {
             showSaveNotice("error", "수정 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
         }
     };
-    const onDelete = (id) => {
+    const showSaveResultNotice = (result, successText, localText, failedText) => {
+        if (result === "remote") {
+            showSaveNotice("success", successText);
+        }
+        else if (result === "local") {
+            showSaveNotice("warning", localText);
+        }
+        else {
+            showSaveNotice("error", failedText);
+        }
+    };
+    const onDelete = async (id) => {
         if (!window.confirm("삭제할까요?"))
             return;
-        setTasksAndSave((prev) => deleteTask(prev, id));
+        const result = await setTasksAndSave((prev) => deleteTask(prev, id));
+        showSaveResultNotice(result, "할 일이 삭제되었습니다.", "삭제 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "삭제 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
     };
-    const onToggle = (id) => {
-        setTasksAndSave((prev) => toggleTask(prev, id));
+    const onToggle = async (id) => {
+        const result = await setTasksAndSave((prev) => toggleTask(prev, id));
+        showSaveResultNotice(result, "완료 상태가 저장되었습니다.", "완료 상태가 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "완료 상태 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
     };
-    const onSetAssignee = (id) => {
+    const onSetAssignee = async (id) => {
         const who = window.prompt("담당자 이름(또는 공백)", "");
         if (who === null)
             return;
-        setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
+        const result = await setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
+        showSaveResultNotice(result, "담당자가 수정되었습니다.", "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
     };
     const onBulkSeed = () => {
         if (!cohort)
@@ -329,7 +343,11 @@ export default function Tasks() {
             : phase === "during"
                 ? "dashPill dashPill--during"
                 : "dashPill dashPill--post";
-        const renderRow = (t) => (_jsxs("div", { className: "dashItem", children: [_jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: !!t.done, onChange: () => onToggle(t.id), style: { width: 18, height: 18, accentColor: "#2563eb", cursor: "pointer" }, "aria-label": "\uC644\uB8CC \uD1A0\uAE00" }), _jsxs("div", { style: { minWidth: 0 }, children: [_jsx("div", { className: `dashItemTitle ${t.done ? "is-done" : ""}`, children: t.title }), _jsxs("div", { className: "dashItemDate", children: [t.dueDate, " \u00B7 \uB2F4\uB2F9 ", t.assignee?.trim() ? t.assignee : "-"] })] })] }), _jsxs("div", { className: "actions", children: [_jsx("select", { className: "assigneeSelect", value: t.assignee ?? "", onChange: (e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value)), "aria-label": "\uB2F4\uB2F9\uC790 \uC120\uD0DD", children: ASSIGNEE_OPTIONS.map((o) => (_jsx("option", { value: o.value, children: o.label }, o.value))) }), _jsx("button", { type: "button", className: "btn-edit", onClick: () => onEditOpen(t), children: "\uC218\uC815" }), _jsx("button", { type: "button", className: "btn-del", onClick: () => onDelete(t.id), children: "\uC0AD\uC81C" }), t.templateId && (_jsx("button", { type: "button", className: "btn-more", onClick: () => setMenuOpenId((cur) => (cur === t.id ? null : t.id)), "aria-expanded": menuOpenId === t.id, title: "\uD15C\uD50C\uB9BF \uC635\uC158", children: "\u22EF" }))] }), t.templateId && menuOpenId === t.id && (_jsxs("div", { style: { gridColumn: "1 / -1", marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }, children: [_jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => {
+        const renderRow = (t) => (_jsxs("div", { className: "dashItem", children: [_jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: !!t.done, onChange: () => onToggle(t.id), style: { width: 18, height: 18, accentColor: "#2563eb", cursor: "pointer" }, "aria-label": "\uC644\uB8CC \uD1A0\uAE00" }), _jsxs("div", { style: { minWidth: 0 }, children: [_jsx("div", { className: `dashItemTitle ${t.done ? "is-done" : ""}`, children: t.title }), _jsxs("div", { className: "dashItemDate", children: [t.dueDate, " \u00B7 \uB2F4\uB2F9 ", t.assignee?.trim() ? t.assignee : "-"] })] })] }), _jsxs("div", { className: "actions", children: [_jsx("select", { className: "assigneeSelect", value: t.assignee ?? "", onChange: async (e) => {
+                                const value = e.target.value;
+                                const result = await setTasksAndSave((prev) => setAssignee(prev, t.id, value));
+                                showSaveResultNotice(result, "담당자가 수정되었습니다.", "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+                            }, "aria-label": "\uB2F4\uB2F9\uC790 \uC120\uD0DD", children: ASSIGNEE_OPTIONS.map((o) => (_jsx("option", { value: o.value, children: o.label }, o.value))) }), _jsx("button", { type: "button", className: "btn-edit", onClick: () => onEditOpen(t), children: "\uC218\uC815" }), _jsx("button", { type: "button", className: "btn-del", onClick: () => onDelete(t.id), children: "\uC0AD\uC81C" }), t.templateId && (_jsx("button", { type: "button", className: "btn-more", onClick: () => setMenuOpenId((cur) => (cur === t.id ? null : t.id)), "aria-expanded": menuOpenId === t.id, title: "\uD15C\uD50C\uB9BF \uC635\uC158", children: "\u22EF" }))] }), t.templateId && menuOpenId === t.id && (_jsxs("div", { style: { gridColumn: "1 / -1", marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }, children: [_jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => {
                                 const ok = window.confirm("이 템플릿을 모든 차수에 적용할까요?");
                                 if (!ok)
                                     return;
@@ -340,6 +358,7 @@ export default function Tasks() {
                                     offsetDays: 0,
                                 });
                                 setMenuOpenId(null);
+                                showSaveNotice("success", "템플릿이 전체 차수에 적용되었습니다.");
                             }, children: "\uD15C\uD50C\uB9BF \uC804\uCCB4 \uC801\uC6A9" }), _jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => {
                                 const ok = window.confirm("이 템플릿의 제목/기한을 일괄 변경할까요?");
                                 if (!ok)
@@ -351,12 +370,14 @@ export default function Tasks() {
                                     dueDate: nd.trim() ? nd.trim() : undefined,
                                 });
                                 setMenuOpenId(null);
+                                showSaveNotice("success", "템플릿 일괄 수정이 저장되었습니다.");
                             }, children: "\uD15C\uD50C\uB9BF \uC77C\uAD04 \uC218\uC815" }), _jsx("button", { type: "button", className: "btn btn--ghost", onClick: () => {
                                 const ok = window.confirm("이 템플릿으로 생성된 업무를 모두 삭제할까요?");
                                 if (!ok)
                                     return;
                                 bulkDeleteByTemplateId(t.templateId);
                                 setMenuOpenId(null);
+                                showSaveNotice("success", "템플릿 일괄 삭제가 저장되었습니다.");
                             }, children: "\uD15C\uD50C\uB9BF \uC77C\uAD04 \uC0AD\uC81C" })] }))] }, t.id));
         return (_jsxs("section", { className: "card", style: { marginTop: 14 }, children: [_jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }, children: [_jsxs("div", { style: { display: "flex", alignItems: "center", gap: 10 }, children: [_jsx("span", { className: pillClass, children: title }), _jsxs("div", { style: { color: "var(--muted)", fontSize: 12 }, children: ["\uBBF8\uC644\uB8CC ", undone.length, " \u00B7 \uC644\uB8CC ", done.length] })] }), done.length > 0 && (_jsx("button", { type: "button", className: "btn btn--ghost", style: { height: 34, borderRadius: 12 }, onClick: () => setDoneOpen((p) => ({ ...p, [phase]: !p[phase] })), children: doneOpen[phase] ? "완료 접기" : "완료 보기" }))] }), _jsx("div", { className: "dashList", style: { marginTop: 10 }, ref: listRef, children: undone.length === 0 && done.length === 0 ? (_jsx("div", { className: "dashEmpty", children: "\uB4F1\uB85D\uB41C \uC5C5\uBB34\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." })) : (_jsxs(_Fragment, { children: [undone.map(renderRow), doneOpen[phase] && done.map(renderRow)] })) })] }));
     };

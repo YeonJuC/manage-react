@@ -87,22 +87,44 @@ export default function CalendarPage() {
         setEditTitle(task.title);
         setEditDate(task.dueDate);
     };
+    const showSaveResultNotice = (result, successText, localText, failedText) => {
+        if (result === "remote") {
+            showSaveNotice("success", successText);
+        }
+        else if (result === "local") {
+            showSaveNotice("warning", localText);
+        }
+        else {
+            showSaveNotice("error", failedText);
+        }
+    };
     /** 수정 저장 */
-    const saveEdit = () => {
+    const saveEdit = async () => {
         if (!editing)
             return;
         const title = editTitle.trim();
-        if (!title)
+        if (!title) {
+            showSaveNotice("warning", "할 일 내용을 입력해 주세요.");
             return;
+        }
         if (!cohort)
             return;
         const range = cohortDates[cohort];
         const phase = range ? phaseOf(editDate, range.start, range.end) : editing.phase;
-        setTasksAndSave((prev) => prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x)));
+        const result = await setTasksAndSave((prev) => prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x)));
         setEditing(null);
+        showSaveResultNotice(result, "할 일이 수정되었습니다.", "수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "수정 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+    };
+    const onToggle = async (id) => {
+        const result = await setTasksAndSave((prev) => toggleTask(prev, id));
+        showSaveResultNotice(result, "완료 상태가 저장되었습니다.", "완료 상태가 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "완료 상태 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+    };
+    const onAssigneeChange = async (id, value) => {
+        const result = await setTasksAndSave((prev) => setAssignee(prev, id, value));
+        showSaveResultNotice(result, "담당자가 수정되었습니다.", "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
     };
     // ✅ 삭제: 기본/반복 템플릿 일정은 다음 기수에도 안 나오도록 전체 차수 공통 삭제
-    const onDelete = (t) => {
+    const onDelete = async (t) => {
         if (!cohort)
             return;
         const templateId = getTaskTemplateId(t);
@@ -111,12 +133,13 @@ export default function CalendarPage() {
             : "이 할 일을 삭제할까요?");
         if (!ok)
             return;
-        if (templateId) {
-            dismissTemplateForAllCohorts(templateId);
-            setTasksAndSave((prev) => prev.filter((x) => getTaskTemplateId(x) !== templateId));
-            return;
-        }
-        setTasksAndSave((prev) => deleteTask(prev, t.id));
+        const result = templateId
+            ? await (async () => {
+                dismissTemplateForAllCohorts(templateId);
+                return setTasksAndSave((prev) => prev.filter((x) => getTaskTemplateId(x) !== templateId));
+            })()
+            : await setTasksAndSave((prev) => deleteTask(prev, t.id));
+        showSaveResultNotice(result, "할 일이 삭제되었습니다.", "삭제 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.", "삭제 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
     };
     if (!ready)
         return _jsx("div", { className: "card", style: { padding: 16 }, children: "\uB85C\uB529 \uC911\u2026" });
@@ -175,7 +198,7 @@ export default function CalendarPage() {
                                             else {
                                                 showSaveNotice("error", "저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
                                             }
-                                        }, children: "\uCD94\uAC00" })] })), !cohort && _jsx("div", { style: { color: "var(--muted)" }, children: "\uCC28\uC218\uB97C \uC120\uD0DD\uD558\uBA74 \uC77C\uC815\uC5D0 \uD45C\uC2DC\uB429\uB2C8\uB2E4." }), cohort && dayTasks.length === 0 && (_jsx("div", { style: { color: "var(--muted)", marginLeft: 5, marginTop: 16 }, children: "\uC774 \uB0A0\uC9DC\uC5D0 \uB4F1\uB85D\uB41C \uD560 \uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." })), cohort && dayTasks.length > 0 && (_jsx("div", { style: { display: "grid", gap: 10, marginTop: 10 }, children: dayTasks.map((t) => (_jsxs("div", { className: "card", style: { padding: 12 }, children: [_jsxs("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [_jsxs("label", { style: { display: "flex", gap: 10, alignItems: "center", flex: 1 }, children: [_jsx("input", { type: "checkbox", checked: t.done, onChange: () => setTasksAndSave((prev) => toggleTask(prev, t.id)) }), _jsx("span", { style: { textDecoration: t.done ? "line-through" : "none" }, children: t.title })] }), _jsxs("div", { style: { display: "flex", gap: 8, alignItems: "center" }, className: "actions", children: [_jsxs("select", { value: t.assignee, onChange: (e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value)), style: { height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn-edit", onClick: () => openEdit(t), children: "\uC218\uC815" }), _jsx("button", { className: "btn-del", onClick: () => onDelete(t), title: "\uD560 \uC77C \uC0AD\uC81C", children: "\uC0AD\uC81C" })] })] }), _jsxs("div", { style: { marginTop: 6, color: "var(--muted)", fontSize: 12 }, children: ["due: ", t.dueDate] })] }, `${t.id}|${t.cohort}|${t.dueDate}`))) }, `${cohort}|${selectedYmd}`)), editing && (_jsx("div", { onClick: () => setEditing(null), style: {
+                                        }, children: "\uCD94\uAC00" })] })), !cohort && _jsx("div", { style: { color: "var(--muted)" }, children: "\uCC28\uC218\uB97C \uC120\uD0DD\uD558\uBA74 \uC77C\uC815\uC5D0 \uD45C\uC2DC\uB429\uB2C8\uB2E4." }), cohort && dayTasks.length === 0 && (_jsx("div", { style: { color: "var(--muted)", marginLeft: 5, marginTop: 16 }, children: "\uC774 \uB0A0\uC9DC\uC5D0 \uB4F1\uB85D\uB41C \uD560 \uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." })), cohort && dayTasks.length > 0 && (_jsx("div", { style: { display: "grid", gap: 10, marginTop: 10 }, children: dayTasks.map((t) => (_jsxs("div", { className: "card", style: { padding: 12 }, children: [_jsxs("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [_jsxs("label", { style: { display: "flex", gap: 10, alignItems: "center", flex: 1 }, children: [_jsx("input", { type: "checkbox", checked: t.done, onChange: () => onToggle(t.id) }), _jsx("span", { style: { textDecoration: t.done ? "line-through" : "none" }, children: t.title })] }), _jsxs("div", { style: { display: "flex", gap: 8, alignItems: "center" }, className: "actions", children: [_jsxs("select", { value: t.assignee, onChange: (e) => onAssigneeChange(t.id, e.target.value), style: { height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }, children: [_jsx("option", { value: "", children: "\uB2F4\uB2F9\uC790" }), _jsx("option", { value: "\uCC28\uC5F0\uC8FC", children: "\uCC28\uC5F0\uC8FC\uC0AC\uC6D0" }), _jsx("option", { value: "\uD55C\uC6D0\uC11D", children: "\uD55C\uC6D0\uC11D\uAD50\uC218" }), _jsx("option", { value: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C", children: "\uB300\uD55C\uC0C1\uACF5\uD68C\uC758\uC18C" }), _jsx("option", { value: "\uD3EC\uC2A4\uD14D", children: "\uD3EC\uC2A4\uD14D" })] }), _jsx("button", { className: "btn-edit", onClick: () => openEdit(t), children: "\uC218\uC815" }), _jsx("button", { className: "btn-del", onClick: () => onDelete(t), title: "\uD560 \uC77C \uC0AD\uC81C", children: "\uC0AD\uC81C" })] })] }), _jsxs("div", { style: { marginTop: 6, color: "var(--muted)", fontSize: 12 }, children: ["due: ", t.dueDate] })] }, `${t.id}|${t.cohort}|${t.dueDate}`))) }, `${cohort}|${selectedYmd}`)), editing && (_jsx("div", { onClick: () => setEditing(null), style: {
                                     position: "fixed",
                                     inset: 0,
                                     background: "rgba(0,0,0,0.35)",

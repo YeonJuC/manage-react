@@ -219,19 +219,52 @@ export default function Tasks() {
     }
   };
 
-  const onDelete = (id: string) => {
+  const showSaveResultNotice = (
+    result: "remote" | "local" | "failed",
+    successText: string,
+    localText: string,
+    failedText: string
+  ) => {
+    if (result === "remote") {
+      showSaveNotice("success", successText);
+    } else if (result === "local") {
+      showSaveNotice("warning", localText);
+    } else {
+      showSaveNotice("error", failedText);
+    }
+  };
+
+  const onDelete = async (id: string) => {
     if (!window.confirm("삭제할까요?")) return;
-    setTasksAndSave((prev) => deleteTask(prev, id));
+    const result = await setTasksAndSave((prev) => deleteTask(prev, id));
+    showSaveResultNotice(
+      result,
+      "할 일이 삭제되었습니다.",
+      "삭제 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "삭제 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
   };
 
-  const onToggle = (id: string) => {
-    setTasksAndSave((prev) => toggleTask(prev, id));
+  const onToggle = async (id: string) => {
+    const result = await setTasksAndSave((prev) => toggleTask(prev, id));
+    showSaveResultNotice(
+      result,
+      "완료 상태가 저장되었습니다.",
+      "완료 상태가 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "완료 상태 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
   };
 
-  const onSetAssignee = (id: string) => {
+  const onSetAssignee = async (id: string) => {
     const who = window.prompt("담당자 이름(또는 공백)", "");
     if (who === null) return;
-    setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
+    const result = await setTasksAndSave((prev) => setAssignee(prev, id, who.trim()));
+    showSaveResultNotice(
+      result,
+      "담당자가 수정되었습니다.",
+      "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
   };
 
   const onBulkSeed = () => {
@@ -416,7 +449,16 @@ export default function Tasks() {
           <select
             className="assigneeSelect"
             value={t.assignee ?? ""}
-            onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
+            onChange={async (e) => {
+              const value = e.target.value;
+              const result = await setTasksAndSave((prev) => setAssignee(prev, t.id, value));
+              showSaveResultNotice(
+                result,
+                "담당자가 수정되었습니다.",
+                "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+                "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+              );
+            }}
             aria-label="담당자 선택"
           >
             {ASSIGNEE_OPTIONS.map((o) => (
@@ -461,6 +503,7 @@ export default function Tasks() {
                   offsetDays: 0,
                 });
                 setMenuOpenId(null);
+                showSaveNotice("success", "템플릿이 전체 차수에 적용되었습니다.");
               }}
             >
               템플릿 전체 적용
@@ -478,6 +521,7 @@ export default function Tasks() {
                   dueDate: nd.trim() ? nd.trim() : undefined,
                 });
                 setMenuOpenId(null);
+                showSaveNotice("success", "템플릿 일괄 수정이 저장되었습니다.");
               }}
             >
               템플릿 일괄 수정
@@ -490,6 +534,7 @@ export default function Tasks() {
                 if (!ok) return;
                 bulkDeleteByTemplateId(t.templateId!);
                 setMenuOpenId(null);
+                showSaveNotice("success", "템플릿 일괄 삭제가 저장되었습니다.");
               }}
             >
               템플릿 일괄 삭제

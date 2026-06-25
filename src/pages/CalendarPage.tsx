@@ -96,26 +96,70 @@ export default function CalendarPage() {
     setEditDate(task.dueDate);
   };
 
+  const showSaveResultNotice = (
+    result: "remote" | "local" | "failed",
+    successText: string,
+    localText: string,
+    failedText: string
+  ) => {
+    if (result === "remote") {
+      showSaveNotice("success", successText);
+    } else if (result === "local") {
+      showSaveNotice("warning", localText);
+    } else {
+      showSaveNotice("error", failedText);
+    }
+  };
+
   /** 수정 저장 */
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editing) return;
 
     const title = editTitle.trim();
-    if (!title) return;
+    if (!title) {
+      showSaveNotice("warning", "할 일 내용을 입력해 주세요.");
+      return;
+    }
     if (!cohort) return;
 
     const range = cohortDates[cohort as CohortKey];
     const phase = range ? phaseOf(editDate, range.start, range.end) : editing.phase;
 
-    setTasksAndSave((prev) =>
+    const result = await setTasksAndSave((prev) =>
       prev.map((x) => (x.id === editing.id ? { ...x, title, dueDate: editDate, phase } : x))
     );
 
     setEditing(null);
+    showSaveResultNotice(
+      result,
+      "할 일이 수정되었습니다.",
+      "수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "수정 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
+  };
+
+  const onToggle = async (id: string) => {
+    const result = await setTasksAndSave((prev) => toggleTask(prev, id));
+    showSaveResultNotice(
+      result,
+      "완료 상태가 저장되었습니다.",
+      "완료 상태가 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "완료 상태 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
+  };
+
+  const onAssigneeChange = async (id: string, value: string) => {
+    const result = await setTasksAndSave((prev) => setAssignee(prev, id, value));
+    showSaveResultNotice(
+      result,
+      "담당자가 수정되었습니다.",
+      "담당자 수정 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "담당자 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
   };
 
   // ✅ 삭제: 기본/반복 템플릿 일정은 다음 기수에도 안 나오도록 전체 차수 공통 삭제
-  const onDelete = (t: Task) => {
+  const onDelete = async (t: Task) => {
     if (!cohort) return;
     const templateId = getTaskTemplateId(t);
     const ok = window.confirm(
@@ -125,13 +169,19 @@ export default function CalendarPage() {
     );
     if (!ok) return;
 
-    if (templateId) {
-      dismissTemplateForAllCohorts(templateId);
-      setTasksAndSave((prev) => prev.filter((x) => getTaskTemplateId(x) !== templateId));
-      return;
-    }
+    const result = templateId
+      ? await (async () => {
+          dismissTemplateForAllCohorts(templateId);
+          return setTasksAndSave((prev) => prev.filter((x) => getTaskTemplateId(x) !== templateId));
+        })()
+      : await setTasksAndSave((prev) => deleteTask(prev, t.id));
 
-    setTasksAndSave((prev) => deleteTask(prev, t.id));
+    showSaveResultNotice(
+      result,
+      "할 일이 삭제되었습니다.",
+      "삭제 내용이 임시 저장되었습니다. 온라인 상태에서 자동 저장됩니다.",
+      "삭제 저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요."
+    );
   };
 
   if (!ready) return <div className="card" style={{ padding: 16 }}>로딩 중…</div>;
@@ -280,7 +330,7 @@ export default function CalendarPage() {
                       <input
                         type="checkbox"
                         checked={t.done}
-                        onChange={() => setTasksAndSave((prev) => toggleTask(prev, t.id))}
+                        onChange={() => onToggle(t.id)}
                       />
                       <span style={{ textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
                     </label>
@@ -288,7 +338,7 @@ export default function CalendarPage() {
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }} className="actions">
                       <select
                         value={t.assignee}
-                        onChange={(e) => setTasksAndSave((prev) => setAssignee(prev, t.id, e.target.value))}
+                        onChange={(e) => onAssigneeChange(t.id, e.target.value)}
                         style={{ height: 34, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)" }}
                       >
                         <option value="">담당자</option>
