@@ -87,6 +87,20 @@ export default function Tasks() {
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const [q, setQ] = useState("");
+  const [saveNotice, setSaveNotice] = useState<{ type: "success" | "warning" | "error"; text: string } | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  const showSaveNotice = (type: "success" | "warning" | "error", text: string) => {
+    setSaveNotice({ type, text });
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 2400);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
 
   const visible = useMemo(() => {
     let arr = tasks.filter((t) => t.cohort === cohort);
@@ -128,18 +142,28 @@ export default function Tasks() {
   const total = visible.length;
   const doneCount = visible.filter((t) => t.done).length;
 
-  const onAdd = () => {
-    if (!cohort) return;
+  const onAdd = async () => {
+    if (!cohort) {
+      showSaveNotice("warning", "차수를 먼저 선택해 주세요.");
+      return;
+    }
+
     const title = window.prompt("업무명을 입력하세요");
     if (!title || !title.trim()) return;
+
     const dueDate = window.prompt("기한(YYYY-MM-DD) 입력", "");
     if (!dueDate || !dueDate.trim()) return;
 
     const due = dueDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      showSaveNotice("error", "기한은 YYYY-MM-DD 형식으로 입력해 주세요.");
+      return;
+    }
+
     const target = cohortDates[cohort as CohortKey];
     const phase = target ? phaseOf(due, target.start, target.end) : "during";
 
-    setTasksAndSave((prev) =>
+    const result = await setTasksAndSave((prev) =>
       addTask(prev, {
         cohort,
         title: title.trim(),
@@ -149,6 +173,14 @@ export default function Tasks() {
         origin: "custom",
       })
     );
+
+    if (result === "remote") {
+      showSaveNotice("success", "할 일이 등록되어 저장되었습니다.");
+    } else if (result === "local") {
+      showSaveNotice("warning", "할 일이 임시 저장되었습니다. 온라인 상태에서 자동으로 다시 저장됩니다.");
+    } else {
+      showSaveNotice("error", "저장에 실패했습니다. 로그인 상태와 권한을 확인해 주세요.");
+    }
   };
 
   const onEditOpen = (t: Task) => {
@@ -498,6 +530,16 @@ export default function Tasks() {
 
   return (
     <div>
+      {saveNotice && (
+        <div
+          className={`saveToast saveToast--${saveNotice.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          {saveNotice.text}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>할 일</h2>
 

@@ -38,7 +38,7 @@ type Ctx = {
   setCohort: (c: CohortKey | "") => void;
 
   tasks: Task[];
-  setTasksAndSave: (updater: (prev: Task[]) => Task[]) => void;
+  setTasksAndSave: (updater: (prev: Task[]) => Task[]) => Promise<"remote" | "local" | "failed">;
 
   reload: () => Promise<void>;
 
@@ -85,6 +85,7 @@ const LS_COHORT_BASE = "manage-react:cohort";
 const LS_COHORT_AT_BASE = "manage-react:cohortUpdatedAt";
 const LS_TASKS_BASE = "manage-react:tasks";
 const LS_TASKS_AT_BASE = "manage-react:tasksUpdatedAt";
+const LS_TASKS_PENDING_BASE = "manage-react:tasksPendingRemoteSave";
 
 // ✅ 공용(viewMode=common)에서 "뷰어(내 uid)별" 마지막 선택 차수 저장 키
 const LS_COMMON_VIEW_COHORT = "manage-react:commonViewCohort";
@@ -366,25 +367,47 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   }, [uid, ownerUid, viewMode, hydrated, cohort]);
 
   // ✅ 수정/추가는 무조건 이 함수로만
-  const setTasksAndSave = (updater: (prev: Task[]) => Task[]) => {
-    setTasks((prev) => {
-      const next = updater(prev);
+  // - 로컬 저장을 먼저 확정하고 pending 표시를 남겨 브라우저를 바로 닫아도 다음 실행 때 원격 저장을 재시도
+  // - 호출부가 등록 성공/실패 메시지를 띄울 수 있도록 저장 결과를 Promise로 반환
+  const setTasksAndSave = (updater: (prev: Task[]) => Task[]): Promise<"remote" | "local" | "failed"> => {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const finish = (result: "remote" | "local" | "failed") => {
+        if (resolved) return;
+        resolved = true;
+        resolve(result);
+      };
 
-      if (ownerUid) {
+      setTasks((prev) => {
+        const next = updater(prev);
+        const updatedAt = Date.now();
+
+        if (!ownerUid) {
+          finish("failed");
+          return next;
+        }
+
+        // 1) 로컬에 즉시 저장 + pending 표시(강제 보존)
         saveJSONLocal(lsKey(LS_TASKS_BASE, ownerUid), next);
-        saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), Date.now());
-      }
+        saveJSONLocal(lsKey(LS_TASKS_AT_BASE, ownerUid), updatedAt);
+        saveJSONLocal(lsKey(LS_TASKS_PENDING_BASE, ownerUid), true);
 
-      if (ownerUid && hydrated && navigator.onLine) {
-        void saveTasks(ownerUid, next).catch((e) => {
-          console.error("[saveTasks failed]", e);
-          alert(
-            "⚠️ 저장에 실패했습니다. (권한/네트워크 문제)\n새로고침하면 이전 데이터로 돌아갈 수 있어요.\n콘솔 에러를 확인해 주세요."
-          );
-        });
-      }
+        // 2) 원격 저장이 불가능한 상태여도 로컬에는 남기고, 온라인 복귀 시 재시도
+        if (!hydrated || !navigator.onLine) {
+          finish("local");
+          return next;
+        }
 
-      return next;
+        // 3) 원격 저장 성공 시 pending 해제, 실패 시 pending 유지
+        void saveTasks(ownerUid, next)
+          .then(() => finish("remote"))
+          .catch((e) => {
+            console.error("[saveTasks failed]", e);
+            finish("local");
+          });
+
+        return next;
+      });
     });
   };
 

@@ -4,3 +4,5 @@ export const cohorts = [
     { key: "34", label: "34기(3차)" },
     { key: "35", label: "35기(4차)" },
 ];
+
+export const taskTemplates = [];

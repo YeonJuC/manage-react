@@ -1675,3 +1675,31 @@ body { background: var(--bg); color: var(--text); font-family: "Pretendard", sys
 .nav-external:visited {
   color: #555;
 }
+
+.saveToast {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  z-index: 9999;
+  max-width: min(420px, calc(100vw - 44px));
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.16);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.saveToast--success {
+  border-color: #bbf7d0;
+}
+
+.saveToast--warning {
+  border-color: #fde68a;
+}
+
+.saveToast--error {
+  border-color: #fecaca;
+}
